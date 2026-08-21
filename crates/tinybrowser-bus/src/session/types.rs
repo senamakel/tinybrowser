@@ -185,6 +185,3 @@ pub struct SessionInfo {
     /// The title of that page, empty if it has none yet.
     pub title: String,
 }
-
-#[cfg(test)]
-mod test_support {}
