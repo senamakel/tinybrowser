@@ -1700,6 +1700,18 @@ async fn live_pressing_enter_in_a_form_settles_its_submission() {
         .await
         .expect("presses");
 
+    for i in 0..6 {
+        let v = browser
+            .evaluate(
+                &session.id,
+                &tinybrowser::EvaluateRequest::new(
+                    "[location.href, document.readyState, document.title]",
+                ),
+            )
+            .await;
+        eprintln!("DIAG t+{i}: {v:?}");
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    }
     assert!(
         outcome.page.url.starts_with(&destination),
         "expected the submission to land on {destination}, but the page is at {}",
