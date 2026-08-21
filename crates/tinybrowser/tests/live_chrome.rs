@@ -11,9 +11,14 @@
 //! cargo test -p tinybrowser --features live-chrome
 //! ```
 //!
-//! They are still hermetic in the way that matters: every page they drive is a
-//! `data:` URL built in the test, so nothing here touches the network, and no
-//! assertion depends on a website that can change underneath it.
+//! They are still hermetic in the way that matters: every page they drive is
+//! served by a one-shot HTTP server this file starts on loopback, so nothing
+//! here touches the network and no assertion depends on a website that can
+//! change underneath it.
+//!
+//! Loopback rather than a `data:` URL because the module refuses to navigate to
+//! anything but `http`, `https`, and `about:blank` — a policy worth keeping, and
+//! one a test suite should be bound by rather than exempt from.
 //!
 //! # They fail rather than skip
 //!
@@ -107,7 +112,7 @@ async fn on(body: &str) -> (Browser, SessionInfo) {
         .expect("a browser is available; see this file's docs");
 
     browser
-        .navigate(&session.id, &NavigateRequest::new(page(body)))
+        .navigate(&session.id, &NavigateRequest::new(serve(body).await))
         .await
         .expect("navigates");
 
@@ -122,7 +127,7 @@ async fn live_navigating_reports_where_the_page_landed() {
         .navigate(
             &session.id,
             &NavigateRequest {
-                url: page("<h1>Second</h1>"),
+                url: serve("<h1>Second</h1>").await,
                 wait_until: WaitUntil::DomContentLoaded,
                 timeout_ms: Some(10_000),
             },
@@ -131,7 +136,10 @@ async fn live_navigating_reports_where_the_page_landed() {
         .expect("navigates");
 
     assert_eq!(state.title, "tinybrowser");
-    assert!(state.url.starts_with("data:text/html,"));
+    assert!(state.url.starts_with("http://127.0.0.1:"), "{}", state.url);
+    // The status comes from the response the navigation actually received, which
+    // is the one thing a caller cannot recover from the URL alone.
+    assert_eq!(state.status, Some(200));
     browser.close_session(&session.id).await.expect("closes");
 }
 
