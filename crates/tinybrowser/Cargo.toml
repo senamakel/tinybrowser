@@ -1,15 +1,15 @@
 [package]
-name = "template"
+name = "tinybrowser"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "A production-ready template for installable TinyBus modules."
-documentation = "https://docs.rs/template"
+description = "A Chrome DevTools Protocol browser engine for agents, packaged as an installable TinyBus module."
+documentation = "https://docs.rs/tinybrowser"
 readme = "../../README.md"
-keywords = ["tinybus", "module", "plugin", "template"]
-categories = ["development-tools"]
+keywords = ["tinybus", "module", "browser", "cdp", "automation"]
+categories = ["web-programming", "development-tools"]
 publish = false
 
 [lib]
@@ -20,20 +20,46 @@ crate-type = ["rlib", "cdylib"]
 [dependencies]
 # The wire contract: member names, payload types, and the contract version.
 # Re-exported wholesale from `src/lib.rs` so a consumer takes one dependency
-# rather than two, and so `template::GreetRequest` and
-# `template_bus::GreetRequest` are the same type.
-template-bus = { workspace = true }
+# rather than two, and so `tinybrowser::Action` and `tinybrowser_bus::Action`
+# are the same type.
+tinybrowser-bus = { workspace = true }
 tinybus = { workspace = true }
 tinybus-module = { workspace = true }
 thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+# The engine is asynchronous end to end: one CDP socket multiplexes every
+# in-flight command, and sessions outlive the call that created them.
+tokio = { workspace = true }
+# The Chrome DevTools Protocol is JSON-RPC over a WebSocket. This is the client
+# half of that socket, with TLS so a remote `wss://` endpoint works unchanged.
+tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
+# `SplitSink`/`StreamExt` over the WebSocket, and nothing else.
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+# Chrome publishes its per-target WebSocket URLs over an HTTP endpoint
+# (`/json/version`, `/json/list`); this fetches them. `rustls` rather than
+# native TLS so the module does not link OpenSSL into its host.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-webpki-roots"] }
+# Screenshots cross the bus as base64 inside a JSON frame, and CDP hands them
+# over base64-encoded already.
+base64 = "0.22"
+# Held screenshot outputs are addressed by an unguessable id.
+uuid = { version = "1", features = ["v4"] }
+# Held outputs are digested so a host can verify what it reassembled.
+sha2 = "0.10"
+# Navigation targets are parsed and normalised before they reach Chrome, and
+# the same parse backs the origin allowlist.
+url = "2"
 
 [dev-dependencies]
-tokio = { workspace = true }
 # The GitHub release verifier passes an explicit empty module configuration.
 serde_json = { workspace = true }
 
 [features]
 default = []
+# End-to-end tests that drive a real Chrome. Off by default: CI runners without
+# a browser would fail them for the wrong reason.
+live-chrome = []
 
 [lints]
 workspace = true
