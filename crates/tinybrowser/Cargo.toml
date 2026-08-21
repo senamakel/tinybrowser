@@ -57,6 +57,8 @@ url = "2"
 [dev-dependencies]
 # The GitHub release verifier passes an explicit empty module configuration.
 serde_json = { workspace = true }
+# The `live-chrome` suite reassembles a held screenshot to check it round trips.
+base64 = "0.22"
 
 [features]
 default = []
