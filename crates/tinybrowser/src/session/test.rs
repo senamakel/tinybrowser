@@ -235,3 +235,59 @@ fn an_exception_without_a_description_still_reports_something() {
     let error = unwrap_evaluation(&result).expect_err("refused");
     assert!(error.to_string().contains("Uncaught (in promise)"));
 }
+
+#[test]
+fn a_host_and_port_entry_matches_that_port_only() {
+    // `localhost:3000` is what an operator developing against a local server
+    // will write. Parsed as a URL it becomes the scheme `localhost` with the
+    // path `3000`, matches nothing, and blocks everything — a failure that
+    // looks exactly like a typo in their configuration.
+    let allowed = vec!["localhost:3000".to_string()];
+
+    assert!(
+        check_allowed(
+            &normalize_url("http://localhost:3000/app").unwrap(),
+            &allowed
+        )
+        .is_ok()
+    );
+    assert!(check_allowed(&normalize_url("http://localhost:3001/").unwrap(), &allowed).is_err());
+    assert!(check_allowed(&normalize_url("https://elsewhere.test/").unwrap(), &allowed).is_err());
+}
+
+#[test]
+fn a_bare_host_entry_admits_any_port() {
+    // No port named means the operator did not care which one.
+    let allowed = vec!["localhost".to_string()];
+
+    assert!(check_allowed(&normalize_url("http://localhost:3000/").unwrap(), &allowed).is_ok());
+    assert!(check_allowed(&normalize_url("http://localhost:9999/").unwrap(), &allowed).is_ok());
+}
+
+#[test]
+fn an_origin_entry_still_carries_its_port() {
+    let allowed = vec!["http://localhost:3000".to_string()];
+
+    assert!(check_allowed(&normalize_url("http://localhost:3000/a").unwrap(), &allowed).is_ok());
+    assert!(check_allowed(&normalize_url("http://localhost:3001/a").unwrap(), &allowed).is_err());
+}
+
+#[test]
+fn about_blank_is_admitted_even_under_an_allowlist() {
+    // It is not a destination on the network, and it is how a caller clears the
+    // page. A session that could never let go of the last page it loaded would
+    // be the opposite of what an allowlist is for.
+    let allowed = vec!["https://example.com".to_string()];
+    let blank = normalize_url("about:blank").expect("normalizes");
+
+    assert!(check_allowed(&blank, &allowed).is_ok());
+}
+
+#[test]
+fn a_default_port_matches_an_entry_that_spells_it_out() {
+    // `https://example.com/` has no explicit port; the entry names 443.
+    let allowed = vec!["example.com:443".to_string()];
+
+    assert!(check_allowed(&normalize_url("https://example.com/").unwrap(), &allowed).is_ok());
+    assert!(check_allowed(&normalize_url("http://example.com/").unwrap(), &allowed).is_err());
+}
