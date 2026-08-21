@@ -50,11 +50,13 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+use base64::Engine as _;
 use tinybrowser::{
     Action, Browser, Error, ImageFormat, LocateBy, Locator, NavigateRequest, ReadFormat,
     ReadRequest, ScreenshotRequest, ScrollDirection, SessionInfo, SessionOptions, SnapshotRequest,
     Target, WaitState, WaitUntil,
 };
+use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 
 /// Serves `body` as a complete HTML document on loopback, and returns its URL.
 ///
@@ -78,8 +80,6 @@ async fn serve(body: &str) -> String {
             };
             let document = document.clone();
             tokio::spawn(async move {
-                use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
-
                 // Read and discard the request: a server that replies without
                 // draining can have the write fail on it.
                 let mut scratch = [0_u8; 2048];
@@ -559,7 +559,6 @@ async fn live_sessions_are_listed_and_close_cleanly() {
 
 /// Standard base64, for reassembling a held output.
 fn base64_decode(encoded: &str) -> Vec<u8> {
-    use base64::Engine as _;
     base64::engine::general_purpose::STANDARD
         .decode(encoded)
         .expect("the module encodes standard base64")

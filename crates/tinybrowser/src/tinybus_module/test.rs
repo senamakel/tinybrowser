@@ -16,6 +16,7 @@ use tinybrowser_bus::{SessionId, errors, names};
 use tinybus::broker::Broker;
 use tinybus::transport::memory::MemoryBus;
 use tinybus::{Connection, Interface};
+use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 
 use super::{BrowserService, setup};
 
@@ -203,8 +204,6 @@ async fn serve(body: &'static str) -> String {
         let Ok((mut stream, _)) = listener.accept().await else {
             return;
         };
-        use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
-
         let mut scratch = [0_u8; 2048];
         let _ = stream.read(&mut scratch).await;
         let document = format!(

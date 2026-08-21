@@ -7,6 +7,10 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+use futures_util::{SinkExt as _, StreamExt as _};
+use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+use tokio_tungstenite::tungstenite::Message;
+
 use super::client::CdpClient;
 use super::endpoint::resolve;
 use super::launch::{
@@ -86,8 +90,6 @@ async fn http_once(body: &'static str, status: &'static str) -> String {
         let Ok((mut stream, _)) = listener.accept().await else {
             return;
         };
-        use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
-
         let mut scratch = [0_u8; 1024];
         let _ = stream.read(&mut scratch).await;
         let response = format!(
@@ -254,9 +256,6 @@ async fn fake_browser(
     let address = listener.local_addr().expect("has an address");
 
     tokio::spawn(async move {
-        use futures_util::{SinkExt as _, StreamExt as _};
-        use tokio_tungstenite::tungstenite::Message;
-
         let Ok((stream, _)) = listener.accept().await else {
             return;
         };
