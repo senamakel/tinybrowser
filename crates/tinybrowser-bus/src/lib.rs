@@ -1,7 +1,7 @@
 //! Every type that crosses the tinybrowser module's `TinyBus` boundary, and the
 //! names of the members that carry them.
 //!
-//! tinybrowser drives a real Chrome over the Chrome DevTools Protocol and
+//! `tinybrowser` drives a real Chrome over the Chrome `DevTools` Protocol and
 //! publishes that as a handful of bus members an agent host can build tools on:
 //! open a session, navigate, snapshot the accessibility tree, act on a ref, read
 //! the page, screenshot it, close. This crate is the vocabulary those members

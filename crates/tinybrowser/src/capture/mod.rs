@@ -98,11 +98,34 @@ pub(crate) async fn screenshot(
     store.lock().await.insert(
         bytes,
         request.format.media_type(),
-        // Rounded up: a fractional CSS pixel still occupies a whole device one,
-        // and truncating reports an image a pixel narrower than it is.
-        width.ceil().max(0.0) as u32,
-        height.ceil().max(0.0) as u32,
+        pixels(width),
+        pixels(height),
     )
+}
+
+/// A CSS dimension as a whole number of pixels.
+///
+/// Rounded up, because a fractional CSS pixel still occupies a whole device one
+/// and truncating reports an image a pixel narrower than it is. Saturating
+/// rather than cast, because `as` on a negative or enormous float is a silently
+/// wrong number, and both are values a page can produce.
+fn pixels(dimension: f64) -> u32 {
+    let rounded = dimension.ceil();
+    if rounded.is_nan() || rounded <= 0.0 {
+        return 0;
+    }
+    if rounded >= f64::from(u32::MAX) {
+        return u32::MAX;
+    }
+    // Bounded above and below by the two branches above.
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "the value is checked to be within u32 immediately above"
+    )]
+    {
+        rounded as u32
+    }
 }
 
 /// The clip rectangle covering one element.

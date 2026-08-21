@@ -109,7 +109,7 @@ impl Default for Viewport {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SessionOptions {
-    /// Attach to an already-running browser at this DevTools endpoint —
+    /// Attach to an already-running browser at this `DevTools` endpoint —
     /// `http://127.0.0.1:9222`, or a `ws://`/`wss://` browser socket — instead
     /// of launching one.
     ///
@@ -167,7 +167,7 @@ pub struct SessionInfo {
     pub id: SessionId,
     /// The `ws://` browser endpoint the module is driving.
     ///
-    /// Reported so an operator debugging a stuck session can attach DevTools to
+    /// Reported so an operator debugging a stuck session can attach `DevTools` to
     /// the same browser rather than guessing which one it is.
     pub endpoint: String,
     /// Whether this browser was launched by the module. A session that attached

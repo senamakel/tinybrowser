@@ -138,7 +138,10 @@ impl Error {
     pub fn wire_name(&self) -> &'static str {
         match self {
             Self::InvalidInput { .. } => errors::INVALID_INPUT,
-            Self::NoSuchSession { .. } => errors::NO_SUCH_SESSION,
+            // A lost connection is a dead session from the host's point of
+            // view, and `NoSuchSession` is the name that tells it to open a new
+            // one rather than retry into a socket that will never answer.
+            Self::NoSuchSession { .. } | Self::ConnectionLost { .. } => errors::NO_SUCH_SESSION,
             Self::NoSuchElement { .. } => errors::NO_SUCH_ELEMENT,
             Self::StaleRef { .. } => errors::STALE_REF,
             Self::NotActionable { .. } => errors::NOT_ACTIONABLE,
@@ -148,9 +151,6 @@ impl Error {
             Self::PageError { .. } => errors::PAGE_ERROR,
             Self::NoSuchOutput { .. } => errors::NO_SUCH_OUTPUT,
             Self::LimitExceeded { .. } => errors::LIMIT_EXCEEDED,
-            // A lost connection is a dead session from the host's point of view,
-            // and `NoSuchSession` is the name that tells it to open a new one.
-            Self::ConnectionLost { .. } => errors::NO_SUCH_SESSION,
             Self::ModuleFailed { .. } => errors::MODULE_FAILED,
         }
     }

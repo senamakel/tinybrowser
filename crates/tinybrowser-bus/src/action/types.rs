@@ -172,7 +172,7 @@ pub enum ScrollDirection {
 }
 
 /// The condition [`Action::WaitFor`] blocks on.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WaitState {
     /// The element exists in the DOM.
@@ -180,15 +180,14 @@ pub enum WaitState {
     /// The element is gone from the DOM.
     Detached,
     /// The element exists and is rendered.
+    ///
+    /// The default: an element that exists but is not rendered is one an agent
+    /// cannot act on, so waiting for mere existence usually means waiting for
+    /// the wrong thing.
+    #[default]
     Visible,
     /// The element is absent or not rendered.
     Hidden,
-}
-
-impl Default for WaitState {
-    fn default() -> Self {
-        Self::Visible
-    }
 }
 
 /// One interaction with the active page.

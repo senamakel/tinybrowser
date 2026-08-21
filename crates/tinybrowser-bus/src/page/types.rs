@@ -35,7 +35,7 @@ impl Default for WaitUntil {
 }
 
 /// Where to send the session's active page.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct NavigateRequest {
     /// The destination. A bare host such as `example.com` is read as `https://`,
@@ -46,16 +46,6 @@ pub struct NavigateRequest {
     pub wait_until: WaitUntil,
     /// Deadline in milliseconds. Falls back to the session's default when absent.
     pub timeout_ms: Option<u64>,
-}
-
-impl Default for NavigateRequest {
-    fn default() -> Self {
-        Self {
-            url: String::new(),
-            wait_until: WaitUntil::default(),
-            timeout_ms: None,
-        }
-    }
 }
 
 impl NavigateRequest {
@@ -106,14 +96,16 @@ impl PageState {
 }
 
 /// The shape a page is extracted into.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReadFormat {
     /// The rendered text of the page, with the chrome — navigation, scripts,
     /// styles, hidden nodes — dropped.
     Text,
     /// The same content as [`ReadFormat::Text`], keeping headings, links, lists,
-    /// and code blocks as Markdown. This is what a model reads best.
+    /// and code blocks as Markdown. This is what a model reads best, and the
+    /// default for that reason.
+    #[default]
     Markdown,
     /// The live serialized DOM, after scripts have run.
     ///
@@ -121,12 +113,6 @@ pub enum ReadFormat {
     /// a host that needs to parse structure the other two formats discard, and
     /// it is by far the most expensive of the three.
     Html,
-}
-
-impl Default for ReadFormat {
-    fn default() -> Self {
-        Self::Markdown
-    }
 }
 
 /// A request to read the active page.

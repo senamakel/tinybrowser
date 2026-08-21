@@ -53,22 +53,18 @@ impl From<&str> for OutputId {
 }
 
 /// The encoding a screenshot is captured in.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ImageFormat {
-    /// Lossless. Correct for a screenshot a model will read text from.
+    /// Lossless. Correct for a screenshot a model will read text from, and the
+    /// default for that reason.
+    #[default]
     Png,
     /// Lossy, and much smaller. Correct for a long full-page capture where the
     /// question is layout rather than legibility.
     Jpeg,
     /// Lossy, smaller again, and not universally readable downstream.
     Webp,
-}
-
-impl Default for ImageFormat {
-    fn default() -> Self {
-        Self::Png
-    }
 }
 
 impl ImageFormat {
@@ -91,7 +87,11 @@ impl ImageFormat {
 }
 
 /// What to capture.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// The default is the viewport as a PNG, which is what a model looking at a page
+/// wants: lossless enough to read text out of, and bounded by the viewport
+/// rather than by however long the document happens to be.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ScreenshotRequest {
     /// Capture just this element. Defaults to the viewport.
@@ -103,17 +103,6 @@ pub struct ScreenshotRequest {
     /// Quality from 1 to 100, for the lossy formats. Ignored for
     /// [`ImageFormat::Png`].
     pub quality: Option<u8>,
-}
-
-impl Default for ScreenshotRequest {
-    fn default() -> Self {
-        Self {
-            target: None,
-            full_page: false,
-            format: ImageFormat::default(),
-            quality: None,
-        }
-    }
 }
 
 /// A handle to an image the module is holding.
