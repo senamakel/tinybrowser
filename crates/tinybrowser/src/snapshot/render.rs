@@ -113,18 +113,36 @@ pub(crate) struct Rendered {
     pub(crate) truncated: bool,
 }
 
-/// Renders `nodes` according to `request`.
+/// Renders `nodes` according to `request`, optionally scoped to a subtree.
 ///
-/// `nodes` is the tree as `Accessibility.getFullAXTree` returned it: a flat
-/// list in which parents name their children by id.
-pub(crate) fn render(nodes: &[AxNode], request: &SnapshotRequest) -> Rendered {
+/// `nodes` is the tree as `Accessibility.getFullAXTree` returned it: a flat list
+/// in which parents name their children by id.
+///
+/// `root` is the backend node id to start from, for a scoped snapshot. Scoping
+/// happens here rather than at the protocol because `getFullAXTree` has no
+/// parameter for it — it takes a depth and a frame, and a node id passed to it
+/// is *ignored*, which returns the whole page while looking like it worked.
+/// `getPartialAXTree` does take a node, but returns that node and its relatives
+/// rather than the subtree under it, which is a different thing again. Pruning
+/// the full tree is both correct and testable without a browser.
+///
+/// Returns `None` when `root` names a node that is not in the tree, which is the
+/// caller's cue to report [`crate::Error::NoSuchElement`].
+pub(crate) fn render(
+    nodes: &[AxNode],
+    request: &SnapshotRequest,
+    root: Option<i64>,
+) -> Option<Rendered> {
     let by_id: HashMap<&str, &AxNode> = nodes
         .iter()
         .map(|node| (node.node_id.as_str(), node))
         .collect();
 
-    let Some(root) = nodes.iter().find(|node| !node.ignored) else {
-        return Rendered::default();
+    let root = match root {
+        Some(backend) => nodes
+            .iter()
+            .find(|node| node.backend_dom_node_id == Some(backend))?,
+        None => nodes.iter().find(|node| !node.ignored)?,
     };
 
     let mut state = Walk {
@@ -147,12 +165,12 @@ pub(crate) fn render(nodes: &[AxNode], request: &SnapshotRequest) -> Rendered {
         tree = tree.chars().take(request.max_chars).collect();
     }
 
-    Rendered {
+    Some(Rendered {
         tree,
         refs: state.refs,
         nodes: state.nodes,
         truncated,
-    }
+    })
 }
 
 /// The state carried down one traversal.

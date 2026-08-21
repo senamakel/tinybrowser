@@ -45,15 +45,16 @@ pub(crate) async fn capture(session: &Session, request: &SnapshotRequest) -> Res
     // session pay for a tree nobody asked for.
     session.send("Accessibility.enable", json!({})).await?;
 
-    let params = match &request.selector {
-        Some(selector) => {
-            let backend = super::interact::resolve::selector_node(session, selector).await?;
-            json!({ "backendNodeId": backend })
-        }
-        None => json!({}),
+    // Resolved before the tree is fetched so a selector that matches nothing
+    // fails without paying for a document-sized response first.
+    let root = match &request.selector {
+        Some(selector) => Some(super::interact::resolve::selector_node(session, selector).await?),
+        None => None,
     };
 
-    let response = session.send("Accessibility.getFullAXTree", params).await?;
+    let response = session
+        .send("Accessibility.getFullAXTree", json!({}))
+        .await?;
 
     let nodes: Vec<AxNode> = serde_json::from_value(
         response
@@ -63,7 +64,12 @@ pub(crate) async fn capture(session: &Session, request: &SnapshotRequest) -> Res
     )
     .map_err(|error| Error::page(format!("accessibility tree could not be read: {error}")))?;
 
-    let rendered = render::render(&nodes, request);
+    let rendered = render::render(&nodes, request, root).ok_or_else(|| Error::NoSuchElement {
+        target: request
+            .selector
+            .clone()
+            .unwrap_or_else(|| "document".to_string()),
+    })?;
     let sequence = session.refs().lock().await.replace(rendered.nodes);
     let page = session.page_state().await?;
 

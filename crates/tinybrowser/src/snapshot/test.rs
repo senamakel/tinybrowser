@@ -70,7 +70,7 @@ fn nodes(value: serde_json::Value) -> Vec<AxNode> {
 
 #[test]
 fn a_tree_renders_as_indented_roles_and_names() {
-    let rendered = render(&page(), &SnapshotRequest::default());
+    let rendered = render(&page(), &SnapshotRequest::default(), None).expect("renders");
 
     assert!(
         rendered
@@ -83,7 +83,7 @@ fn a_tree_renders_as_indented_roles_and_names() {
 
 #[test]
 fn addressable_nodes_carry_a_ref_and_unaddressable_ones_do_not() {
-    let rendered = render(&page(), &SnapshotRequest::default());
+    let rendered = render(&page(), &SnapshotRequest::default(), None).expect("renders");
 
     assert!(rendered.tree.contains("- link \"More information\" @"));
     // The generic wrapper is neither interactive nor content: there is nothing
@@ -93,7 +93,7 @@ fn addressable_nodes_carry_a_ref_and_unaddressable_ones_do_not() {
 
 #[test]
 fn refs_are_minted_in_document_order() {
-    let rendered = render(&page(), &SnapshotRequest::default());
+    let rendered = render(&page(), &SnapshotRequest::default(), None).expect("renders");
     let ids: Vec<&str> = rendered.refs.iter().map(|r| r.id.as_str()).collect();
 
     assert_eq!(ids.first(), Some(&"e1"));
@@ -109,7 +109,7 @@ fn refs_are_minted_in_document_order() {
 
 #[test]
 fn every_ref_resolves_to_a_backend_node() {
-    let rendered = render(&page(), &SnapshotRequest::default());
+    let rendered = render(&page(), &SnapshotRequest::default(), None).expect("renders");
 
     for element in &rendered.refs {
         assert!(
@@ -123,7 +123,7 @@ fn every_ref_resolves_to_a_backend_node() {
 
 #[test]
 fn interactive_only_keeps_the_controls_and_drops_the_prose() {
-    let rendered = render(&page(), &SnapshotRequest::interactive());
+    let rendered = render(&page(), &SnapshotRequest::interactive(), None).expect("renders");
 
     assert!(rendered.tree.contains("- link \"More information\""));
     assert!(rendered.tree.contains("- button \"Submit\""));
@@ -137,7 +137,7 @@ fn compact_drops_the_structural_scaffolding() {
         compact: true,
         ..SnapshotRequest::default()
     };
-    let rendered = render(&page(), &request);
+    let rendered = render(&page(), &request, None).expect("renders");
 
     // Dropped even though it is named: the wrapper tells an agent nothing the
     // items inside it do not.
@@ -150,7 +150,7 @@ fn compact_drops_the_structural_scaffolding() {
 fn a_disabled_control_says_so() {
     // An agent that cannot see this clicks the button, gets no error, and
     // reports that it submitted the form.
-    let rendered = render(&page(), &SnapshotRequest::default());
+    let rendered = render(&page(), &SnapshotRequest::default(), None).expect("renders");
     assert!(rendered.tree.contains("- button \"Submit\" disabled"));
 }
 
@@ -167,7 +167,7 @@ fn state_that_is_false_is_not_rendered() {
         "childIds": [],
         "backendDOMNodeId": 1,
     }]));
-    let rendered = render(&tree, &SnapshotRequest::default());
+    let rendered = render(&tree, &SnapshotRequest::default(), None).expect("renders");
 
     assert!(rendered.tree.contains("- checkbox \"Remember me\""));
     assert!(!rendered.tree.contains("checked"));
@@ -176,7 +176,7 @@ fn state_that_is_false_is_not_rendered() {
 
 #[test]
 fn urls_are_annotated_only_when_asked_for() {
-    let without = render(&page(), &SnapshotRequest::default());
+    let without = render(&page(), &SnapshotRequest::default(), None).expect("renders");
     assert!(!without.tree.contains("iana.org"));
 
     let with = render(
@@ -185,7 +185,9 @@ fn urls_are_annotated_only_when_asked_for() {
             include_urls: true,
             ..SnapshotRequest::default()
         },
-    );
+        None,
+    )
+    .expect("renders");
     assert!(with.tree.contains("url=\"https://iana.org/domains\""));
 }
 
@@ -195,7 +197,7 @@ fn depth_stops_the_walk() {
         depth: Some(0),
         ..SnapshotRequest::default()
     };
-    let rendered = render(&page(), &request);
+    let rendered = render(&page(), &request, None).expect("renders");
 
     assert!(rendered.tree.contains("RootWebArea"));
     assert!(!rendered.tree.contains("heading"));
@@ -207,7 +209,7 @@ fn max_chars_truncates_and_says_so() {
         max_chars: 20,
         ..SnapshotRequest::default()
     };
-    let rendered = render(&page(), &request);
+    let rendered = render(&page(), &request, None).expect("renders");
 
     assert!(rendered.truncated);
     assert_eq!(rendered.tree.chars().count(), 20);
@@ -239,7 +241,7 @@ fn an_ignored_node_is_skipped_but_its_children_are_not() {
             "backendDOMNodeId": 3,
         },
     ]));
-    let rendered = render(&tree, &SnapshotRequest::default());
+    let rendered = render(&tree, &SnapshotRequest::default(), None).expect("renders");
 
     assert!(rendered.tree.contains("- button \"Buried\""));
 }
@@ -264,7 +266,7 @@ fn a_cyclic_tree_terminates() {
             "backendDOMNodeId": 2,
         },
     ]));
-    let rendered = render(&tree, &SnapshotRequest::default());
+    let rendered = render(&tree, &SnapshotRequest::default(), None).expect("renders");
 
     assert!(rendered.tree.contains("- button \"Round\""));
 }
