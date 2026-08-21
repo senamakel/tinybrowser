@@ -7,10 +7,10 @@
 //! cargo run -p tinybrowser --example basic
 //! ```
 //!
-//! It drives a real browser when this host has one. When it does not — a CI
-//! runner, a minimal container — it prints the same error a caller would get and
-//! exits successfully, because "no browser here" is a fact about the machine
-//! rather than a failure of the example.
+//! It drives a real browser when this host has one and can reach the page.
+//! When it cannot — a CI runner with no browser, a container with no egress —
+//! it prints the same error a caller would get and exits successfully, because
+//! both are facts about the machine rather than failures of the example.
 
 use tinybrowser::{
     Action, Browser, Error, NavigateRequest, ReadRequest, SessionOptions, SnapshotRequest, Target,
@@ -30,9 +30,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     println!("opened {} at {}", session.id, session.endpoint);
 
-    let page = browser
+    let page = match browser
         .navigate(&session.id, &NavigateRequest::new("https://example.com"))
-        .await?;
+        .await
+    {
+        Ok(page) => page,
+        Err(error @ (Error::PageError { .. } | Error::Timeout { .. })) => {
+            println!("cannot reach example.com from this host: {error}");
+            browser.close_session(&session.id).await?;
+            return Ok(());
+        }
+        Err(error) => return Err(error.into()),
+    };
     println!("{} — {:?}", page.url, page.title);
 
     // What an agent reads: the accessibility tree, with a ref on everything it
