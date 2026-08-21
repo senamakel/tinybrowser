@@ -202,7 +202,7 @@ async fn live_a_ref_from_a_previous_snapshot_is_refused() {
     browser
         .navigate(
             &session.id,
-            &NavigateRequest::new(page("<button>Beta</button>")),
+            &NavigateRequest::new(serve("<button>Beta</button>").await),
         )
         .await
         .expect("navigates");
