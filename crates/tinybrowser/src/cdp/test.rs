@@ -8,7 +8,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use super::endpoint::resolve;
-use super::launch::{EXECUTABLE_ENV, find_executable};
+use super::launch::{ARGS_ENV, EXECUTABLE_ENV, environment_args, find_executable};
 use crate::error::Error;
 
 #[tokio::test]
@@ -68,16 +68,17 @@ fn a_configured_executable_that_does_not_exist_is_reported_not_searched_past() {
 }
 
 #[test]
-fn the_error_for_a_missing_browser_names_the_three_ways_out() {
-    // This message is what an operator sees when a host has no browser at all,
-    // and it is the only place the module can tell them what to do about it.
-    let Err(error) = find_executable(Some("/nonexistent/chrome")) else {
-        panic!("expected a missing browser");
-    };
-    let _ = error;
+fn the_environment_supplies_no_extra_flags_by_default() {
+    // Read rather than set: a test that mutates the environment races every
+    // other test in the process, and the default is the case worth pinning.
+    if std::env::var(ARGS_ENV).is_err() {
+        assert!(environment_args().is_empty());
+    }
+}
 
-    // The override is named in the message the discovery path produces, which is
-    // only reachable on a host without a browser — assert on the constant the
-    // message is built from instead.
+#[test]
+fn the_environment_variables_are_the_documented_names() {
+    // An operator sets these on a host; renaming one silently stops it working.
     assert_eq!(EXECUTABLE_ENV, "TINYBROWSER_CHROME");
+    assert_eq!(ARGS_ENV, "TINYBROWSER_CHROME_ARGS");
 }

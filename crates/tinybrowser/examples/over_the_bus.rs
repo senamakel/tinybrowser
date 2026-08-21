@@ -223,11 +223,10 @@ fn arguments() -> Result<(PathBuf, String), io::Error> {
         )
     })?;
 
-    let url = args
-        .next()
-        .map_or_else(|| "https://example.com".to_string(), |raw| {
-            raw.to_string_lossy().into_owned()
-        });
+    let url = args.next().map_or_else(
+        || "https://example.com".to_string(),
+        |raw| raw.to_string_lossy().into_owned(),
+    );
 
     Ok((module, url))
 }

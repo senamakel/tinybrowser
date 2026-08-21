@@ -26,6 +26,20 @@ use tokio::process::{Child, Command};
 
 use crate::error::{Error, Result};
 
+/// Environment variable supplying extra launch flags for every session.
+///
+/// Whitespace-separated, appended after the session's own
+/// [`tinybrowser_bus::SessionOptions::args`]. It exists because the flags a
+/// browser needs are usually a property of the *host*, not of the caller: a
+/// container without the right capabilities needs `--no-sandbox` for every
+/// session anybody opens, and plumbing that through a host's configuration into
+/// every call site is a lot of machinery to say one thing about the machine.
+///
+/// It cannot narrow anything the module does — flags only ever loosen a
+/// browser — so an operator setting it is making a choice about their own host,
+/// which is the person who should be making it.
+pub(crate) const ARGS_ENV: &str = "TINYBROWSER_CHROME_ARGS";
+
 /// Environment variable naming the browser to launch.
 ///
 /// The escape hatch for a host whose Chrome is somewhere this module would never
@@ -208,6 +222,7 @@ pub(crate) async fn launch(
 
     command
         .args(extra_args)
+        .args(environment_args())
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         // Chrome prints its debugger URL to stderr, and this is the only
@@ -313,6 +328,15 @@ fn diagnose(banner: &[String]) -> String {
             printed.join(" | ")
         )
     }
+}
+
+/// The extra flags [`ARGS_ENV`] supplies, if any.
+pub(crate) fn environment_args() -> Vec<String> {
+    std::env::var(ARGS_ENV)
+        .unwrap_or_default()
+        .split_whitespace()
+        .map(str::to_string)
+        .collect()
 }
 
 /// A private profile directory for one launched browser.
