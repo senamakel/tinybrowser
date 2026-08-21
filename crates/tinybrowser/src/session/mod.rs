@@ -292,10 +292,10 @@ impl Session {
 
         let _ = tokio::time::timeout(self.deadline(None), async {
             loop {
-                if let Some((_, ready)) = self.document_status().await {
-                    if ready == "complete" {
-                        return;
-                    }
+                if let Some((_, ready)) = self.document_status().await
+                    && ready == "complete"
+                {
+                    return;
                 }
                 tokio::time::sleep(READY_POLL).await;
             }
