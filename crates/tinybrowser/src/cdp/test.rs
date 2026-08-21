@@ -570,7 +570,9 @@ async fn a_browser_that_starts_and_says_nothing_times_out() {
     use std::os::unix::fs::PermissionsExt as _;
 
     let script = std::env::temp_dir().join(format!("tinybrowser-mute-{}", std::process::id()));
-    std::fs::write(&script, "#!/bin/sh\nsleep 30\n").expect("writes the script");
+    // `exec` so the shell *becomes* the sleep: killing the child then ends it,
+    // rather than leaving an orphan holding the inherited pipe open.
+    std::fs::write(&script, "#!/bin/sh\nexec sleep 30\n").expect("writes the script");
     std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755))
         .expect("makes it executable");
 
