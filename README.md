@@ -1,156 +1,143 @@
-# Rust Template
+# tinybrowser
 
-A production-ready Rust 2024 TinyBus module template used by TinyHumans AI. It
-ships the workspace layout, TinyBus ABI adapter, error handling, testing,
-documentation, CI, and multi-platform release workflow that every new
-integration in this organization starts from.
+A browser for agents, shipped as a loadable [TinyBus](https://github.com/tinyhumansai/tinybus)
+module.
 
-It is a two-crate cargo workspace. `crates/template-bus` is the wire contract —
-member names, payload types, and the contract version, with no transport and no
-behavior — and `crates/template` is the implementation, built as both an `rlib`
-and the `cdylib` TinyBus loads. A host that only makes calls depends on the
-contract crate alone and compiles neither the module nor `tinybus` itself.
-
-## Use This Template
-
-Choose **Use this template** on GitHub, create a repository, then work through
-the checklist at the top of [`AGENTS.md`](AGENTS.md):
-
-- rename the `crates/template` and `crates/template-bus` directories and the
-  `name` fields in their manifests, and set the shared `description`,
-  `repository`, `keywords`, and `categories`;
-- update this README and the crate documentation in `crates/template/src/lib.rs`;
-- replace the placeholder `greeting` module with the first real feature area, in
-  both crates: the payload types in the contract, the behavior in the module;
-- rename the TinyBus interface, object path, and member constants in
-  `crates/template-bus/src/names/`, and the matching `provides` / `methods`
-  declarations in `crates/template/src/tinybus_module/`;
-- update the security contact and repository links in the community files;
-- replace `ROADMAP.md` with the real plan, or delete it;
-- change the license if GPL-3.0-only is not appropriate.
-
-Search for `template` and `template_bus` to find every remaining
-template-specific value.
-
-## What You Get
-
-| Area | What is configured |
-| --- | --- |
-| Layout | A cargo workspace under `crates/`, split into a dependency-light wire contract and the module that implements it; directory modules with `mod.rs` / `types.rs` / `test.rs`, a crate-wide error type, integration tests, and a runnable example |
-| Lints | `unsafe_code` forbidden, `missing_docs`, clippy `all` + `pedantic`, no `unwrap`/`expect`/`panic`/`todo` in library code — all declared once in `[workspace.lints]` so every crate, local run, and CI run agree |
-| CI | Format, clippy, build, test (default and all features), a run of the bundled example, an assertion that the contract crate stays transport-free, at least 90% line coverage in every source file, rustdoc with `-D warnings`, an MSRV build, and a `cargo-deny` supply-chain check |
-| Release | Manual `workflow_dispatch` bump that validates, versions, tags, and creates installable native module packages for every supported platform |
-| Community | Issue and pull request templates, Dependabot, contributing, security, support, and code of conduct docs |
-| Agents | [`AGENTS.md`](AGENTS.md) as the single source of truth, symlinked as `CLAUDE.md`, plus a `.claude/settings.json` allowlist for the standard commands |
-| Vendor | TinyBus host types and module SDK pinned as the `vendor/tinybus` build-time submodule |
-
-## Layout
+`tinybrowser` drives a real Chrome over the Chrome DevTools Protocol — launching
+it, navigating, snapshotting the accessibility tree, dispatching real input
+events, extracting text, taking screenshots — and publishes all of it as a
+handful of bus members. A host loads one `cdylib` and gets a browser without a
+browser stack in its build.
 
 ```text
-Cargo.toml              # virtual workspace: members, shared metadata, lints
-crates/
-├── template-bus/       # the wire contract — what crosses the bus
-│   ├── README.md       # why the contract is its own crate
-│   └── src/
-│       ├── lib.rs      # crate docs + the entire public re-export surface
-│       ├── names/      # interface, object path, one constant per member
-│       ├── greeting/   # payload types, one directory per family
-│       │   ├── mod.rs
-│       │   ├── types.rs
-│       │   └── test.rs
-│       └── version/    # contract version and the host bind rule
-└── template/           # the module — behavior, adapter, and the cdylib
-    ├── src/
-    │   ├── lib.rs      # crate docs + public surface, re-exporting the contract
-    │   ├── error/      # crate-wide `Error` and `Result<T>`
-    │   ├── greeting/   # one directory per feature area
-    │   └── tinybus_module/   # bus interface, setup, and ABI v1 exports
-    ├── tests/
-    │   └── public_api.rs     # integration tests against the public API only
-    └── examples/
-        ├── basic.rs                  # ordinary library API usage
-        ├── verify_module.rs          # local dynamic-module verification
-        └── verify_github_release.rs  # tagged-release download and bus call
-vendor/
-└── tinybus/            # pinned TinyBus git submodule
-docs/
-├── README.md           # documentation index and conventions
-├── specs/              # behavior and architecture specifications
-├── plans/              # implementation-ordered delivery plans
-└── adr/                # immutable architecture decision records
+OpenSession  ->  Navigate  ->  Snapshot  ->  Perform  ->  Snapshot  ->  ...
+                                   |             |
+                               ReadPage      Screenshot
 ```
 
-The split is the point. A payload type describes what a frame carries; the
-behavior that answers it is a different obligation. `template` depends on
-`template-bus` and re-exports all of it, so `template::GreetRequest` and
-`template_bus::GreetRequest` are the *same* type rather than structural twins,
-and a host is never forced to choose between linking the whole module and
-redefining the vocabulary. See
-[`crates/template-bus/README.md`](crates/template-bus/README.md).
+## Why it exists
 
-Within each crate, feature areas use directory modules: implementation and
-exports live in `mod.rs`, substantial types move to `types.rs`, and unit tests
-live in `test.rs`. [`AGENTS.md`](AGENTS.md) holds the complete repository
-guidance, and `CLAUDE.md` is a symlink to it so every coding agent reads one
-source of truth.
+An agent host that wants to look at a web page has bad options. Shelling out to
+a browser CLI means a subprocess, a JSON parser around its output, and a binary
+to install and version-match. Linking a browser stack in means dragging a
+WebSocket client, a TLS stack, an image codec and a protocol surface into a
+binary that mostly does something else — and a crash anywhere in it is a crash
+in the host.
+
+This is the third option: the browser lives behind a wire. The host keeps a
+proxy and a `serde` derive.
+
+## What an agent sees
+
+A snapshot, not HTML:
+
+```text
+- RootWebArea "Example Domain"
+  - heading "Example Domain" @e1
+  - paragraph "This domain is for use in illustrative examples." @e2
+  - link "More information..." @e3
+```
+
+That is the browser's own accessibility tree — an order of magnitude smaller
+than the DOM, with hidden nodes already gone and every control carrying its
+role, name, and state. The agent picks `@e3` and passes it straight back as the
+target of a click, so the thing it acts on is the thing it saw. A ref from an
+older view is refused rather than resolved against whatever now occupies that
+position.
+
+## The surface
+
+| Member | What it does |
+| --- | --- |
+| `OpenSession` / `CloseSession` / `ListSessions` | Launch or attach a browser, and give it back |
+| `Navigate` | Go somewhere, waiting as far as `commit`, `load`, or `networkIdle` |
+| `Snapshot` | The accessibility tree, with refs |
+| `Perform` | Click, fill, type, press, select, check, hover, scroll, wait, read, go back |
+| `ReadPage` | The page as text, Markdown, or serialized DOM |
+| `Evaluate` | JavaScript in, value out |
+| `Screenshot` + `ReadOutput` / `ReleaseOutput` | An image, collected in chunks |
+| `ContractVersion` | What a host checks before its first real call |
+
+Every name and payload is published by `tinybrowser-bus`, a two-dependency crate
+a host links instead of repeating string literals.
+
+## Using it
+
+### From Rust, directly
+
+```rust,no_run
+use tinybrowser::{Action, Browser, NavigateRequest, SnapshotRequest, Target};
+
+# async fn example() -> tinybrowser::Result<()> {
+let browser = Browser::new();
+let session = browser.open_session(Default::default()).await?;
+
+browser.navigate(&session.id, &NavigateRequest::new("https://example.com")).await?;
+let snapshot = browser.snapshot(&session.id, &SnapshotRequest::interactive()).await?;
+println!("{}", snapshot.tree);
+
+browser
+    .perform(&session.id, &Action::Click { target: Target::parse("@e1"), new_tab: false })
+    .await?;
+browser.close_session(&session.id).await?;
+# Ok(())
+# }
+```
+
+### From a host, over the bus
+
+`crates/tinybrowser/examples/over_the_bus.rs` is the reference: load the module,
+wait for it to claim its name, check the contract version, then call. Run it
+against a module you have built:
+
+```sh
+cargo build -p tinybrowser --release
+cargo run -p tinybrowser --example over_the_bus -- \
+  target/release/libtinybrowser.so https://example.com
+```
+
+`docs/openhuman-integration.md` covers wiring it into an OpenHuman host and the
+agent-facing tool that sits on top.
+
+## Requirements
+
+A Chrome or Chromium on the host, or a DevTools endpoint to attach to. The
+module looks in the conventional places; `TINYBROWSER_CHROME` names one
+explicitly, and `TINYBROWSER_CHROME_ARGS` adds launch flags every session needs
+— `--no-sandbox` on a host where unprivileged user namespaces are restricted,
+most often.
+
+A host that already runs a browser should point the module at it instead, with
+`SessionOptions::endpoint`.
 
 ## Development
 
-Clone with submodules, or initialize them before building:
-
 ```sh
 git submodule update --init --recursive
-```
 
-```sh
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo build --all-targets --all-features
 cargo test --all-features
-cargo run -p template --example basic
-cargo build -p template --release --lib   # produces the installable cdylib
 ```
 
-Those four checks are exactly what CI runs. Optional extras:
+The end-to-end suite drives a real browser and is opt-in, because a runner
+without one would fail it for the wrong reason:
 
 ```sh
-cargo doc --no-deps --all-features   # CI builds this with RUSTDOCFLAGS="-D warnings"
-cargo deny check all                 # supply-chain check; see deny.toml
-cargo install cargo-llvm-cov         # once, before running the coverage gate
-.github/scripts/check-file-coverage.sh 90 coverage.json
+TINYBROWSER_LIVE_TESTS=1 cargo test -p tinybrowser --test live_chrome
 ```
 
-## Releasing
+`AGENTS.md` is the full working agreement. `CLAUDE.md` is a symlink to it.
 
-Run the **Release** workflow from the Actions tab with a `patch`, `minor`, or
-`major` bump. Use `current` only to resume an interrupted release whose version
-commit and tag already exist. The workflow revalidates the workspace, versions
-and tags it — one `[workspace.package]` version that every member inherits —
-builds `crates/template` as a TinyBus `cdylib`, and creates a GitHub release.
-Assets follow `template-<version>-<platform>.<tar.gz|zip>` and contain the
-native module, its SHA-256 `modules.toml`, license, and
-[`MODULE.md`](MODULE.md). Every release also publishes `checksum.toml`, which
-TinyBus uses to verify an archive before extraction. The workflow loads the
-published Ubuntu archive through TinyBus's GitHub release API and calls its
-`Greet` method before declaring the release successful. TinyBus itself is not
-shipped by this repository; the pinned submodule is the build-time SDK. The stable native
-matrix covers Ubuntu 22.04 and 24.04 on x86_64 and ARM64; Fedora 43 and 44 on
-x86_64 and ARM64; rolling Arch Linux on its officially supported x86_64
-architecture; macOS 15 and 26 on Intel and Apple Silicon; Windows Server 2022
-and 2025 on x86_64; and Windows 11 on ARM64. Preview, deprecated, and unofficial
-architecture images are not release gates. Do not hand-edit the version in the
-root `Cargo.toml`.
+## Credit
 
-## Documentation
-
-- [`AGENTS.md`](AGENTS.md) — repository guidelines for humans and agents
-- [`CONTRIBUTING.md`](CONTRIBUTING.md) — how to propose a change
-- [`docs/specs/`](docs/specs/README.md) — behavior and architecture specs
-- [`docs/plans/`](docs/plans/README.md) — test-first implementation plans
-- [`docs/adr/`](docs/adr/0001-record-architecture-decisions.md) — architecture
-  decision records
-- [`SECURITY.md`](SECURITY.md) — how to report a vulnerability
+The design owes a great deal to Vercel's
+[`agent-browser`](https://github.com/vercel-labs/agent-browser): the
+accessibility tree as the thing an agent reads, `@ref` addressing scoped to a
+snapshot, and hit-testing a click point before dispatching at it. See
+`THIRD-PARTY.md`.
 
 ## License
 
-GPL-3.0-only. See [LICENSE](LICENSE).
+GPL-3.0-only. See `LICENSE`.
