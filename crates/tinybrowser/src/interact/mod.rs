@@ -356,10 +356,18 @@ async fn press(session: &Session, chord: &str) -> Result<()> {
         });
 
         // `text` on a keyUp would insert the character a second time.
+        //
+        // `unmodifiedText` is not decoration: Blink decides whether a key press
+        // performs its *default action* — submitting a form on Enter, most
+        // visibly — from that field rather than from `key`. Without it the event
+        // reaches the page's own handlers and does nothing else, so an agent
+        // pressing Enter in a search box watches the keydown fire and the form
+        // never submit.
         if kind == "keyDown"
             && let Some(text) = &stroke.text
         {
             params["text"] = json!(text);
+            params["unmodifiedText"] = json!(text);
         }
 
         session.send("Input.dispatchKeyEvent", params).await?;
