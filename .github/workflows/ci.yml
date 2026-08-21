@@ -20,6 +20,20 @@ jobs:
   rust:
     name: Rust
     runs-on: ubuntu-latest
+    env:
+      # A browser module is not meaningfully tested without a browser, and the
+      # coverage gate below is measured over the same run: with these unset, the
+      # protocol conversation would be both unexercised and uncovered, which is
+      # precisely the half that cannot be checked any other way.
+      #
+      # GitHub's Ubuntu runners ship Google Chrome at a path the module already
+      # looks in, so there is nothing to install.
+      TINYBROWSER_LIVE_TESTS: "1"
+      # Runners restrict unprivileged user namespaces, so Chrome has no usable
+      # sandbox here. Accepting that in a disposable CI VM is a different
+      # decision from applying it on somebody's host, which is why the module
+      # reports the condition rather than working around it by default.
+      TINYBROWSER_CHROME_ARGS: --no-sandbox
     steps:
       - uses: actions/checkout@v7
         with:
