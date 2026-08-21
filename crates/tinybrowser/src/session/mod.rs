@@ -251,42 +251,40 @@ impl Session {
     /// to whatever now occupies that position" failure that
     /// [`crate::Error::StaleRef`] exists to prevent.
     ///
-    /// # Why this polls rather than watching lifecycle events
+    /// # Why it takes two mechanisms
     ///
-    /// Because a cross-origin navigation swaps the renderer process, and the
-    /// `Page.lifecycleEvent` stream does not survive that swap intact: the
-    /// `init` for the new document is not seen by the session that was watching
-    /// for it. Waiting on the event works perfectly for a same-origin click and
-    /// returns immediately for a cross-origin one, which is the worse of the two
-    /// failures — it looks correct against a local fixture and is wrong against
-    /// the open web. This was found by the bundled example, not by the tests.
+    /// Neither signal alone is sufficient, and each fails on exactly the case
+    /// the other handles.
     ///
-    /// Asking the page what it is doing has no such blind spot. It costs a
-    /// handful of round trips on a socket that answers in microseconds, and an
-    /// evaluation that fails because the execution context is being torn down is
-    /// itself the answer: that is a navigation in progress.
+    /// *Waiting for the document to change* misses the start of a cross-origin
+    /// navigation: the browser does not commit to the new URL until the response
+    /// begins arriving, so a click on an external link still reads as "nothing
+    /// happened" for as long as DNS and the request take — far longer than any
+    /// grace period worth paying on every click that navigates nowhere.
+    ///
+    /// *Waiting for lifecycle events* misses the end of one: a cross-origin
+    /// navigation swaps the renderer process, and the `init` and `load` for the
+    /// new document are not seen by the session that was watching for them.
+    ///
+    /// So the start is taken from an event — emitted in the old process, before
+    /// any swap — and the finish from asking the page what it is doing, which
+    /// works whichever process is answering. Both failures were found by the
+    /// bundled example against the open web, not by the tests, which drive a
+    /// same-origin fixture where either mechanism looks correct on its own.
     ///
     /// Errors are deliberately not reported: the caller's action succeeded. A
     /// navigation that fails to settle leaves the page wherever it got to, and
     /// the [`PageState`] returned with the outcome says where that is.
-    pub(crate) async fn settle_after_input(&self, before: &str) {
-        let started = tokio::time::timeout(INPUT_NAVIGATION_GRACE, async {
-            loop {
-                match self.document_status().await {
-                    // The document changed, or the one that is there has not
-                    // finished. Either way, something is happening.
-                    Some((href, ready)) if href != before || ready != "complete" => return,
-                    // The context is gone: a navigation is tearing it down.
-                    None => return,
-                    Some(_) => tokio::time::sleep(READY_POLL).await,
-                }
-            }
-        })
-        .await;
-
-        if started.is_err() {
+    pub(crate) async fn settle_after_input(
+        &self,
+        events: tokio::sync::broadcast::Receiver<crate::cdp::CdpEvent>,
+    ) {
+        if tokio::time::timeout(INPUT_NAVIGATION_GRACE, self.await_navigation_start(events))
+            .await
+            .is_err()
+        {
             // Nothing started within the grace period. The overwhelming
-            // majority of clicks end here, having cost one short poll loop.
+            // majority of clicks end here, having cost one short wait.
             return;
         }
 
@@ -307,6 +305,52 @@ impl Session {
             .lock()
             .await
             .replace(std::collections::HashMap::new());
+    }
+
+    /// Waits for this page to begin navigating.
+    ///
+    /// Any of these means the browser has accepted a navigation, whether or not
+    /// it has committed to one yet. `navigatedWithinDocument` is included
+    /// because a router that only changes the URL still replaces what the refs
+    /// named, even though no document is loaded.
+    async fn await_navigation_start(
+        &self,
+        events: tokio::sync::broadcast::Receiver<crate::cdp::CdpEvent>,
+    ) {
+        const STARTED: &[&str] = &[
+            "Page.frameStartedLoading",
+            "Page.frameRequestedNavigation",
+            "Page.frameStartedNavigating",
+            "Page.navigatedWithinDocument",
+        ];
+
+        let mut events = events;
+        loop {
+            let event = match events.recv().await {
+                Ok(event) => event,
+                // Lagged: the page emitted more than the buffer holds, possibly
+                // including this one. The caller's grace period decides rather
+                // than this loop waiting for an event already dropped.
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
+            };
+
+            if event.session_id.as_deref() == Some(self.page.as_str())
+                && STARTED.contains(&event.method.as_str())
+            {
+                return;
+            }
+        }
+    }
+
+    /// A subscription to everything the browser says from now on.
+    ///
+    /// Taken *before* the action whose consequences are being watched for: a
+    /// subscription opened afterwards can miss an event that has already
+    /// happened, and the wait then sits out its whole deadline for something in
+    /// the past.
+    pub(crate) fn events(&self) -> tokio::sync::broadcast::Receiver<crate::cdp::CdpEvent> {
+        self.client.events()
     }
 
     /// Where the page is, and whether it has finished loading.
