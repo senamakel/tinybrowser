@@ -19,8 +19,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("activeElement id = {active:?}");
 
     b.perform(&s.id, &Action::Press { key: "Enter".to_string() }).await?;
-    let submitted = b.evaluate(&s.id, &EvaluateRequest::new("[!!window.__submitted, location.href]")).await;
-    println!("after Enter: {submitted:?}");
+    for i in 0..8 {
+        let v = b
+            .evaluate(&s.id, &EvaluateRequest::new("[!!window.__submitted, location.href, document.readyState]"))
+            .await;
+        println!("  t+{i}: {v:?}");
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    }
 
     b.close_session(&s.id).await?;
     Ok(())
