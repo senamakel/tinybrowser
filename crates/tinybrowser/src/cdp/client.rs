@@ -76,7 +76,14 @@ pub(crate) struct CdpClient {
     pending: Pending,
     events: broadcast::Sender<CdpEvent>,
     reader: tokio::task::JoinHandle<()>,
-    keepalive: tokio::task::JoinHandle<()>,
+    /// Set once, immediately after construction.
+    ///
+    /// The keepalive task holds a `Weak` back to this client so that pinging
+    /// does not keep the socket alive forever, which means the client must
+    /// exist before the task can be spawned. A `OnceLock` is what lets the
+    /// field be filled afterwards without an `Arc::try_unwrap` that would
+    /// invalidate the very `Weak` the task depends on.
+    keepalive: std::sync::OnceLock<tokio::task::JoinHandle<()>>,
 }
 
 type Socket = tokio_tungstenite::WebSocketStream<
@@ -89,7 +96,9 @@ impl Drop for CdpClient {
         // The reader owns the read half of the socket and the keepalive owns a
         // timer; neither ends on its own when the last handle goes away.
         self.reader.abort();
-        self.keepalive.abort();
+        if let Some(keepalive) = self.keepalive.get() {
+            keepalive.abort();
+        }
     }
 }
 
@@ -202,7 +211,7 @@ impl CdpClient {
             pending,
             events,
             reader,
-            keepalive: tokio::spawn(async {}),
+            keepalive: std::sync::OnceLock::new(),
         });
 
         let pinger = Arc::downgrade(&client);
@@ -225,10 +234,9 @@ impl CdpClient {
             }
         });
 
-        // The client was constructed with a placeholder so the keepalive could
-        // hold a weak reference to it. Swapping the real task in is the only
-        // mutation this type ever makes to itself.
-        let client = replace_keepalive(client, keepalive);
+        // Set, never replaced: `connect` is the only writer and it runs before
+        // any other reference to this client exists.
+        let _ = client.keepalive.set(keepalive);
         Ok(client)
     }
 
@@ -306,29 +314,5 @@ impl CdpClient {
     /// Subscribes to every event the browser emits from now on.
     pub(crate) fn events(&self) -> broadcast::Receiver<CdpEvent> {
         self.events.subscribe()
-    }
-}
-
-/// Installs the real keepalive task on a freshly built client.
-///
-/// [`CdpClient::connect`] has a cycle to break: the keepalive task needs a weak
-/// reference to the client, and the client holds the task's handle. The
-/// placeholder-then-swap is the price of keeping both fields non-optional, and
-/// this function is where the `Arc` is guaranteed unique so the swap is sound.
-fn replace_keepalive(
-    client: Arc<CdpClient>,
-    keepalive: tokio::task::JoinHandle<()>,
-) -> Arc<CdpClient> {
-    match Arc::try_unwrap(client) {
-        Ok(mut owned) => {
-            owned.keepalive.abort();
-            owned.keepalive = keepalive;
-            Arc::new(owned)
-        }
-        // Unreachable in practice — the only other reference is the `Weak` the
-        // keepalive holds, which cannot be upgraded while this runs. If it ever
-        // were reachable, leaving the placeholder in place costs one idle task
-        // and a socket without pings, which is better than aborting the process.
-        Err(shared) => shared,
     }
 }
