@@ -1,100 +1,59 @@
-# template-bus
+# tinybrowser-bus
 
-Every type that crosses the template module's `TinyBus` boundary, and the names
-of the members that carry them.
+Every type that crosses the tinybrowser module's `TinyBus` boundary, and the
+names of the members that carry them.
 
-The template ships as a loadable module so a host does not compile the
-implementation: `crates/template` is built as a `cdylib` and exports one object.
-A host can load that binary but cannot `use` anything out of it, so the payload
-vocabulary has to be published as an ordinary library. This is it.
+tinybrowser ships as a loadable module so a host does not compile a browser:
+`crates/tinybrowser` is built as a `cdylib` and exports one object. A host can
+load that binary but cannot `use` anything out of it, so the payload vocabulary
+has to be published as an ordinary library. This is it.
 
-| module     | what it holds                                                |
-| ---------- | ------------------------------------------------------------ |
-| `names`    | interface name, object path, one constant per member          |
-| `greeting` | the value vocabulary: the `Greet` request and response        |
-| `version`  | `CONTRACT_VERSION` and the bind rule a host applies to it     |
+| module     | what it holds                                                  |
+| ---------- | -------------------------------------------------------------- |
+| `names`    | interface name, object path, one constant per member            |
+| `session`  | opening, listing, and closing the browser a host drives         |
+| `page`     | navigating, extracting a page as text, evaluating JavaScript    |
+| `snapshot` | the accessibility tree, and the refs that address it            |
+| `action`   | every interaction, and the three ways to name an element        |
+| `output`   | screenshots, and the handle protocol that carries them          |
+| `errors`   | the failure names, and which of them an agent can act on        |
+| `version`  | `CONTRACT_VERSION` and the bind rule a host applies to it       |
 
 Two dependencies, both pure Rust: `serde` and `serde_json`.
 
-## This crate sits underneath `template`
+## This crate sits underneath `tinybrowser`
 
-`template` **depends on this crate and re-exports all of it**. That direction
-matters, and it is the opposite of the obvious one.
+`tinybrowser` depends on this crate and re-exports all of it, so
+`tinybrowser::Action` and `tinybrowser_bus::action::Action` are the *same type*,
+not structural twins. Defining a parallel set of payload types for hosts would
+mean a conversion at every call site that nothing checks. One definition, here,
+at the bottom.
 
-A *host* needs the payload types and needs nothing else: it loads the module and
-makes calls, so it names `GreetRequest` and `GreetResponse` but implements no
-behavior and links no transport. Making it depend on the whole module crate — and
-through it on `tinybus`, `tokio`, and the module SDK — to spell a payload type
-would be the wrong shape.
+So: a module author depends on `tinybrowser` and gets behavior and vocabulary. A
+host depends on `tinybrowser-bus` and gets vocabulary alone — which matters,
+because that host is usually a binary that deliberately does not want a browser
+stack in its build. That is the entire reason this split exists.
 
-The alternative, a parallel set of payload types for hosts, is worse: a
-`GreetRequest` defined twice is two distinct types, with a conversion at every
-call site that nothing checks. One definition, here, at the bottom.
+## No transport, on purpose
 
-Because the re-export is by module as well as by item, `template::GreetRequest`,
-`template::names::OBJECT_PATH`, and `template_bus::greeting::GreetRequest` all
-resolve to the same items, not twins.
+This crate holds no connection, client, or codec, and does not depend on
+`tinybus`. A host already owns its connection — its reconnect policy, its
+timeouts, its tracing — and the useful part is the vocabulary, not another
+wrapper around it.
 
-So: a module author depends on `template` and gets behavior and vocabulary. A
-host depends on `template-bus` and gets vocabulary alone.
+It is also a structural necessity: `tinybus` is vendored as a submodule whose
+manifest inherits from its own nested `[workspace.package]`. A crate every
+member can depend on has to stay transport-free, and CI asserts it does.
 
-## What is deliberately absent
+## Nothing here is `#[non_exhaustive]`
 
-**No behavior.** `greet` lives in `crates/template`. A payload type describes
-what a frame carries, not what the module does with it. The split is readable
-off the path: a name here is data, a name there is an obligation.
+Both sides construct these types — a host builds the requests, the module builds
+the replies — and the module is a different crate from this one. Non-exhaustive
+types would leave the implementation unable to build its own replies, and would
+turn `..Default::default()` into a compile error for every caller.
 
-**No transport.** This crate does not depend on `tinybus` and holds no
-connection, client, or codec. A host already owns its connection — its reconnect
-policy, its timeouts, its tracing — and the useful part is the vocabulary.
-
-That is also structural, not just preference: `tinybus` is vendored as a
-submodule whose manifest inherits fields from its own nested
-`[workspace.package]`. Keeping the contract crate transport-free is what keeps
-it down to two dependencies and what lets anything in the workspace — or outside
-it — depend on it freely. CI asserts the dependency tree stays that way.
-
-## Making a call
-
-Arguments travel as a positional JSON array — `#[tinybus::interface]` decodes
-them into a tuple — and the member name comes from `names`:
-
-```rust,ignore
-use template_bus::{names, GreetRequest, GreetResponse};
-
-let proxy = connection.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
-let reply: GreetResponse = proxy
-    .call(names::methods::GREET, (GreetRequest::new("Ferris"),))
-    .await?;
-assert_eq!(reply.greeting, "Hello, Ferris!");
-```
-
-Nothing above is a string literal at a call site. Renaming the interface, the
-path, or a member is therefore a compile error in every consumer rather than an
-`UnknownMethod` discovered at runtime.
-
-## Staying in step with the module
-
-`names::METHODS` lists every member in dispatch order. `crates/template` asserts
-its served members against that list, so a method added to the interface without
-an entry here fails that crate's tests rather than surfacing in a host.
-
-## Versioning
-
-`CONTRACT_VERSION` describes *this vocabulary*, not the package. Bump its major
-component when a payload's wire form changes incompatibly or a member is removed
-or renamed, and its minor component when a member or an optional field is added.
-It is deliberately independent of the package version the release workflow owns,
-which tracks the shipped artifact.
-
-The payload tests pin the serde representation, because that representation is
-the wire form: a host and a module that disagree about a field name fail at
-runtime with a decode error, so the shape is asserted rather than assumed.
-
-## Generating a project from the template
-
-Rename the interface, the object path, and the member constants in `names`
-together, replace `greeting` with the first real payload family, and reset
-`CONTRACT_VERSION` to `(1, 0)` for the new contract. Keep the crate
-dependency-light: the moment it links a transport or a runtime, the reason it
-exists is gone.
+The evolution mechanism is `CONTRACT_VERSION` and the `is_compatible` bind rule
+instead, which is the one that works across a dynamically loaded boundary. Every
+request type carries `#[serde(default)]`, so an added field is additive; a host
+deserializing a reply ignores what it does not know. Neither is something the
+Rust attribute could have enforced through a `cdylib` anyway.
