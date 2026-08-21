@@ -28,10 +28,10 @@ fn the_contract_is_re_exported_rather_than_restated() {
     // The same type, not a structural twin: a host that depends on
     // `tinybrowser-bus` alone and a module author who depends on this crate must
     // be able to pass payloads between each other without a conversion.
-    let from_here: tinybrowser::Action = Action::Reload;
-    let from_there: tinybrowser_bus::Action = from_here;
+    let via_module: tinybrowser::Action = Action::Reload;
+    let via_contract: tinybrowser_bus::Action = via_module;
 
-    assert_eq!(from_there, tinybrowser_bus::Action::Reload);
+    assert_eq!(via_contract, tinybrowser_bus::Action::Reload);
 }
 
 #[test]

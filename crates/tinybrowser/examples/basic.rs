@@ -13,14 +13,14 @@
 //! rather than a failure of the example.
 
 use tinybrowser::{
-    Action, Browser, Error, NavigateRequest, ReadRequest, SnapshotRequest, Target,
+    Action, Browser, Error, NavigateRequest, ReadRequest, SessionOptions, SnapshotRequest, Target,
 };
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let browser = Browser::new();
 
-    let session = match browser.open_session(Default::default()).await {
+    let session = match browser.open_session(SessionOptions::default()).await {
         Ok(session) => session,
         Err(error @ Error::BrowserUnavailable { .. }) => {
             println!("no browser on this host, so there is nothing to drive: {error}");

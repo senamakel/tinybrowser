@@ -49,12 +49,12 @@ struct BrowserService;
 impl BrowserService {
     /// Launches or attaches a browser and returns the session that owns it.
     async fn open_session(&self, options: SessionOptions) -> BusResult<SessionInfo> {
-        engine().open_session(options).await.map_err(to_bus)
+        engine().open_session(options).await.map_err(|error| to_bus(&error))
     }
 
     /// Closes a session and everything it owns.
     async fn close_session(&self, id: SessionId) -> BusResult<()> {
-        engine().close_session(&id).await.map_err(to_bus)
+        engine().close_session(&id).await.map_err(|error| to_bus(&error))
     }
 
     /// Lists the sessions this module is holding open.
@@ -64,22 +64,22 @@ impl BrowserService {
 
     /// Navigates a session's active page.
     async fn navigate(&self, id: SessionId, request: NavigateRequest) -> BusResult<PageState> {
-        engine().navigate(&id, &request).await.map_err(to_bus)
+        engine().navigate(&id, &request).await.map_err(|error| to_bus(&error))
     }
 
     /// Captures the accessibility tree of a session's active page.
     async fn snapshot(&self, id: SessionId, request: SnapshotRequest) -> BusResult<Snapshot> {
-        engine().snapshot(&id, &request).await.map_err(to_bus)
+        engine().snapshot(&id, &request).await.map_err(|error| to_bus(&error))
     }
 
     /// Performs one interaction against a session's active page.
     async fn perform(&self, id: SessionId, action: Action) -> BusResult<ActionOutcome> {
-        engine().perform(&id, &action).await.map_err(to_bus)
+        engine().perform(&id, &action).await.map_err(|error| to_bus(&error))
     }
 
     /// Extracts a session's active page as agent-readable text.
     async fn read_page(&self, id: SessionId, request: ReadRequest) -> BusResult<PageText> {
-        engine().read_page(&id, &request).await.map_err(to_bus)
+        engine().read_page(&id, &request).await.map_err(|error| to_bus(&error))
     }
 
     /// Evaluates JavaScript in a session's active page.
@@ -88,7 +88,7 @@ impl BrowserService {
         id: SessionId,
         request: EvaluateRequest,
     ) -> BusResult<serde_json::Value> {
-        engine().evaluate(&id, &request).await.map_err(to_bus)
+        engine().evaluate(&id, &request).await.map_err(|error| to_bus(&error))
     }
 
     /// Captures a screenshot and holds it for collection.
@@ -97,17 +97,17 @@ impl BrowserService {
         id: SessionId,
         request: ScreenshotRequest,
     ) -> BusResult<OutputRef> {
-        engine().screenshot(&id, &request).await.map_err(to_bus)
+        engine().screenshot(&id, &request).await.map_err(|error| to_bus(&error))
     }
 
     /// Reads one chunk of a held output.
     async fn read_output(&self, id: OutputId, offset: u64, len: u64) -> BusResult<OutputChunk> {
-        engine().read_output(&id, offset, len).await.map_err(to_bus)
+        engine().read_output(&id, offset, len).await.map_err(|error| to_bus(&error))
     }
 
     /// Releases a held output before it expires.
     async fn release_output(&self, id: OutputId) -> BusResult<()> {
-        engine().release_output(&id).await.map_err(to_bus)
+        engine().release_output(&id).await.map_err(|error| to_bus(&error))
     }
 
     /// Reports the contract version this module serves.
@@ -116,6 +116,10 @@ impl BrowserService {
     /// [`tinybrowser_bus::is_compatible`]. Doing it the other way round — making
     /// a real call and reading the failure — cannot distinguish "this member
     /// does not exist" from "this member failed".
+    #[allow(
+        clippy::unused_async,
+        reason = "the interface macro requires every member to be an async fn"
+    )]
     async fn contract_version(&self) -> BusResult<(u32, u32)> {
         Ok(tinybrowser_bus::CONTRACT_VERSION)
     }
@@ -125,7 +129,7 @@ impl BrowserService {
 ///
 /// The name is what carries the meaning; the message is for a person reading a
 /// log. See [`tinybrowser_bus::errors`] for what a host does with each name.
-fn to_bus(error: Error) -> tinybus::Error {
+fn to_bus(error: &Error) -> tinybus::Error {
     tinybus::Error::MethodFailed {
         name: error.wire_name().to_string(),
         message: error.to_string(),
