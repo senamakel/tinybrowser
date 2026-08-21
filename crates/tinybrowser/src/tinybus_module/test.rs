@@ -67,12 +67,21 @@ async fn the_module_reports_the_contract_version_it_was_built_against() -> tinyb
 }
 
 #[tokio::test]
-async fn a_fresh_module_lists_no_sessions() -> tinybus::Result<()> {
+async fn listing_sessions_answers_with_a_decodable_list() -> tinybus::Result<()> {
+    // Not "is empty": the engine behind the members is process-wide, so a live
+    // test running alongside this one has its own session open and belongs in
+    // the list. What this checks is the member — that it answers, and that the
+    // reply decodes as the contract says it will.
     let (proxy, _module) = connected().await?;
     let sessions: Vec<tinybrowser_bus::SessionInfo> =
         proxy.call(names::methods::LIST_SESSIONS, ()).await?;
 
-    assert!(sessions.is_empty());
+    assert!(
+        !sessions
+            .iter()
+            .any(|info| info.id == SessionId::new("never-opened")),
+        "a session nobody opened is listed"
+    );
     Ok(())
 }
 
@@ -239,9 +248,15 @@ async fn live_every_member_answers_over_a_real_bus() -> tinybus::Result<()> {
         .await?;
     assert!(session.launched);
 
+    // Asserted by identity rather than by count: the module's engine is
+    // process-wide on purpose, so every test in this binary shares it and any
+    // other live test with a session open is legitimately in this list too.
     let listed: Vec<tinybrowser_bus::SessionInfo> =
         proxy.call(names::methods::LIST_SESSIONS, ()).await?;
-    assert_eq!(listed.len(), 1);
+    assert!(
+        listed.iter().any(|info| info.id == session.id),
+        "the session just opened is missing from {listed:?}"
+    );
 
     let page: tinybrowser_bus::PageState = proxy
         .call(
@@ -323,7 +338,10 @@ async fn live_every_member_answers_over_a_real_bus() -> tinybus::Result<()> {
 
     let after: Vec<tinybrowser_bus::SessionInfo> =
         proxy.call(names::methods::LIST_SESSIONS, ()).await?;
-    assert!(after.is_empty());
+    assert!(
+        !after.iter().any(|info| info.id == session.id),
+        "the closed session is still listed in {after:?}"
+    );
 
     Ok(())
 }
