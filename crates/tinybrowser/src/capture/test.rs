@@ -11,7 +11,8 @@ use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use tinybrowser_bus::OutputId;
 
-use super::store::OutputStore;
+use super::store::{MAX_OUTPUT_BYTES, OutputStore, TTL};
+use super::within_cap;
 use crate::error::Error;
 
 fn store_with(bytes: Vec<u8>) -> (OutputStore, OutputId) {
@@ -181,4 +182,64 @@ fn an_output_larger_than_the_cap_is_refused_rather_than_held() {
 
     assert!(matches!(error, Error::LimitExceeded { .. }), "{error}");
     assert_eq!(store.len(), 0);
+}
+
+#[test]
+fn an_output_expires_once_its_time_to_live_has_passed() {
+    let (mut store, id) = store_with(b"hello".to_vec());
+    store.age(TTL + std::time::Duration::from_secs(1));
+
+    let error = store.read(&id, 0, 1024).expect_err("refused");
+    assert!(matches!(error, Error::NoSuchOutput { .. }), "{error}");
+}
+
+#[test]
+fn an_output_within_its_time_to_live_survives() {
+    let (mut store, id) = store_with(b"hello".to_vec());
+    store.age(TTL.saturating_sub(std::time::Duration::from_secs(1)));
+
+    assert!(store.read(&id, 0, 1024).is_ok());
+}
+
+#[test]
+fn sweeping_releases_what_nothing_else_would_have() {
+    // The case the sweeper exists for: outputs are held, nobody calls again, and
+    // without an independent sweep the bytes stay resident in the host process
+    // long past the point they were promised to be gone.
+    let mut store = OutputStore::default();
+    for _ in 0..4 {
+        store
+            .insert(vec![0; 1024], "image/png", 1, 1)
+            .expect("within the cap");
+    }
+    assert_eq!(store.len(), 4);
+
+    store.age(TTL + std::time::Duration::from_secs(1));
+    store.expire();
+
+    assert_eq!(store.len(), 0);
+}
+
+#[test]
+fn an_ordinary_screenshot_passes_the_pre_decode_check() {
+    // A full-page capture at 2x is a few megabytes; nothing near the cap.
+    assert!(within_cap(4 * 1024 * 1024).is_ok());
+    assert!(within_cap(0).is_ok());
+}
+
+#[test]
+fn an_oversized_screenshot_is_refused_before_it_is_decoded() {
+    // The point is the ordering: `OutputStore::insert` would refuse this too,
+    // but only after the decode had already allocated it in the host's process.
+    let encoded_len = MAX_OUTPUT_BYTES / 3 * 4 + 8;
+    let error = within_cap(encoded_len).expect_err("refused");
+
+    assert!(matches!(error, Error::LimitExceeded { .. }), "{error}");
+}
+
+#[test]
+fn the_pre_decode_check_agrees_with_the_store_it_is_guarding() {
+    // An encoding that decodes to exactly the cap must pass, or the check would
+    // refuse images the store would happily have held.
+    assert!(within_cap(MAX_OUTPUT_BYTES / 3 * 4).is_ok());
 }

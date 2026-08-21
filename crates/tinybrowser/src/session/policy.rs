@@ -76,6 +76,14 @@ pub(crate) fn check_allowed(url: &Url, allowed: &[String]) -> Result<()> {
         return Ok(());
     }
 
+    // `about:blank` is not a destination on the network and cannot carry
+    // anything back; it is how a caller clears the page. Refusing it would mean
+    // a session that sets an allowlist can never let go of the last page it
+    // loaded, which is the opposite of what the setting is for.
+    if url.scheme() == "about" {
+        return Ok(());
+    }
+
     let Some(host) = url.host_str() else {
         return Err(Error::BlockedByPolicy {
             url: url.to_string(),
@@ -94,13 +102,26 @@ pub(crate) fn check_allowed(url: &Url, allowed: &[String]) -> Result<()> {
                     .ends_with(&format!(".{}", suffix.to_ascii_lowercase()));
         }
 
-        match Url::parse(entry) {
-            Ok(origin) => origin.origin() == url.origin(),
-            // An entry that is neither an origin nor a dotted suffix is matched
-            // as a bare host. Being lenient here is deliberate: an operator who
+        // An entry with a scheme is an origin, and matched as one.
+        if entry.contains("://") {
+            return Url::parse(entry).is_ok_and(|origin| origin.origin() == url.origin());
+        }
+
+        // Everything else is a host, optionally with a port. Parsing it as a URL
+        // would be wrong in a way that fails closed and looks like a typo:
+        // `localhost:3000` parses happily as the scheme `localhost` with the
+        // path `3000`, matches no origin at all, and silently blocks every
+        // destination the operator meant to allow.
+        match entry.rsplit_once(':') {
+            Some((entry_host, port)) if port.chars().all(|c| c.is_ascii_digit()) => {
+                host.eq_ignore_ascii_case(entry_host)
+                    && url.port_or_known_default().map(|actual| actual.to_string())
+                        == Some(port.to_string())
+            }
+            // Being lenient about a bare host is deliberate: an operator who
             // wrote `example.com` meant the site, and refusing to interpret it
             // would silently block everything instead.
-            Err(_) => host.eq_ignore_ascii_case(entry),
+            _ => host.eq_ignore_ascii_case(entry),
         }
     });
 

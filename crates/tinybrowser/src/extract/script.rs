@@ -42,10 +42,15 @@ function (format, selector) {
       return;
     }
     if (node.nodeType !== Node.ELEMENT_NODE) return;
-    if (SKIP.has(node.tagName)) return;
-    if (hidden(node)) return;
 
-    const tag = node.tagName;
+    // Upper-cased before the comparison: `tagName` is upper case for HTML
+    // elements but keeps its original case for foreign content, so an inline
+    // <svg> reports `svg` and slips past a set written in upper case. The
+    // symptom is an icon's <title> text turning up in the middle of a
+    // paragraph.
+    const tag = node.tagName.toUpperCase();
+    if (SKIP.has(tag)) return;
+    if (hidden(node)) return;
 
     if (format === 'markdown') {
       if (/^H[1-6]$/.test(tag)) {

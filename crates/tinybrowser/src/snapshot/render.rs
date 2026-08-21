@@ -34,6 +34,13 @@ use tinybrowser_bus::{ElementRef, SnapshotRequest};
 
 use super::types::AxNode;
 
+/// The deepest the tree is walked, whatever the request asked to render.
+///
+/// An accessibility tree is as deep as the page makes it, and this recurses.
+/// Well past anything a real document reaches, and far short of what would
+/// exhaust the stack.
+const MAX_TRAVERSAL_DEPTH: usize = 1_000;
+
 /// Roles an agent can act on. These get a ref.
 const INTERACTIVE_ROLES: &[&str] = &[
     "button",
@@ -157,7 +164,7 @@ pub(crate) fn render(
         // hang from the list of things a hostile page can cause.
         visited: std::collections::HashSet::new(),
     };
-    state.walk(root, 0);
+    state.walk(root, 0, 0);
 
     let mut tree = state.lines.join("\n");
     let truncated = tree.chars().count() > request.max_chars;
@@ -186,8 +193,16 @@ struct Walk<'a> {
 
 impl<'a> Walk<'a> {
     /// Emits `node` and everything under it at `depth`.
-    fn walk(&mut self, node: &'a AxNode, depth: usize) {
+    fn walk(&mut self, node: &'a AxNode, depth: usize, descended: usize) {
         if !self.visited.insert(node.node_id.as_str()) {
+            return;
+        }
+        // Two different limits. `depth` is what the caller asked to see, and it
+        // only advances for nodes that are actually rendered — so a long chain
+        // of ignored or filtered wrappers never increases it, which means it
+        // cannot bound the recursion. `descended` counts every level walked and
+        // is what keeps a pathologically nested page from exhausting the stack.
+        if descended > MAX_TRAVERSAL_DEPTH {
             return;
         }
         if self
@@ -213,7 +228,7 @@ impl<'a> Walk<'a> {
 
         for child_id in &node.child_ids {
             if let Some(child) = self.by_id.get(child_id.as_str()).copied() {
-                self.walk(child, child_depth);
+                self.walk(child, child_depth, descended + 1);
             }
         }
     }

@@ -30,10 +30,16 @@ const MAX_OUTPUTS: usize = 16;
 ///
 /// A full-page capture of a long article at 2x lands in the low megabytes; this
 /// is several times that and still far below what would matter to a host.
-const MAX_OUTPUT_BYTES: usize = 64 * 1024 * 1024;
+pub(crate) const MAX_OUTPUT_BYTES: usize = 64 * 1024 * 1024;
 
 /// How long an uncollected output survives.
-const TTL: Duration = Duration::from_secs(300);
+pub(crate) const TTL: Duration = Duration::from_secs(300);
+
+/// How often the sweeper looks for outputs to drop.
+///
+/// A fraction of [`TTL`], so an abandoned output is released within a minute or
+/// so of expiring rather than at some unbounded later moment.
+pub(crate) const SWEEP_INTERVAL: Duration = Duration::from_secs(60);
 
 /// The most a single [`read`](OutputStore::read) will return.
 ///
@@ -173,9 +179,28 @@ impl OutputStore {
     }
 
     /// Drops everything past its time to live.
-    fn expire(&mut self) {
+    ///
+    /// Called from the operations *and* from a sweeper, because an expiry that
+    /// only runs when something else happens is not an expiry: a host that takes
+    /// sixteen large screenshots and then goes quiet would hold every byte of
+    /// them, in somebody else's process, until it happened to call again.
+    pub(crate) fn expire(&mut self) {
         let now = Instant::now();
         self.held
             .retain(|_, held| now.duration_since(held.stored) < TTL);
+    }
+}
+
+#[cfg(test)]
+impl OutputStore {
+    /// Ages every held output by `elapsed`, as if that much time had passed.
+    ///
+    /// Expiry is the one behaviour here that is a function of the clock, and a
+    /// test that waited five real minutes to check it would never be run. Moving
+    /// the timestamps back instead keeps the assertion exact and instant.
+    pub(crate) fn age(&mut self, elapsed: Duration) {
+        for held in self.held.values_mut() {
+            held.stored -= elapsed;
+        }
     }
 }

@@ -27,7 +27,7 @@ use store::OutputStore;
 pub(crate) async fn screenshot(
     session: &Session,
     request: &ScreenshotRequest,
-    store: &tokio::sync::Mutex<OutputStore>,
+    store: &std::sync::Arc<tokio::sync::Mutex<OutputStore>>,
 ) -> Result<OutputRef> {
     if let Some(quality) = request.quality
         && !(1..=100).contains(&quality)
@@ -92,6 +92,8 @@ pub(crate) async fn screenshot(
         .and_then(Value::as_str)
         .ok_or_else(|| Error::page("browser captured no image data".to_string()))?;
 
+    within_cap(encoded.len())?;
+
     let bytes = BASE64
         .decode(encoded)
         .map_err(|error| Error::page(format!("screenshot was not valid base64: {error}")))?;
@@ -127,6 +129,36 @@ fn pixels(dimension: f64) -> u32 {
     {
         rounded as u32
     }
+}
+
+/// Refuses an image too large to hold, from the length of its encoding.
+///
+/// Checked before decoding, not after. [`store::OutputStore::insert`] rejects an
+/// image larger than it will hold, but by then the decode has already allocated
+/// it — and the CDP frame carrying it is unbounded by design, because a
+/// full-page capture legitimately exceeds any frame cap worth setting. So the
+/// first place the size is known is the length of the encoded text, and this is
+/// the first place it can be refused without paying for it.
+///
+/// Base64 carries three bytes in four, so the encoded length gives the decoded
+/// size to within the padding.
+///
+/// # Errors
+///
+/// [`Error::LimitExceeded`] when the image would exceed the module's cap.
+fn within_cap(encoded_len: usize) -> Result<()> {
+    let decoded_len = encoded_len / 4 * 3;
+
+    if decoded_len > store::MAX_OUTPUT_BYTES {
+        return Err(Error::LimitExceeded {
+            message: format!(
+                "screenshot of about {decoded_len} bytes exceeds the {} byte cap",
+                store::MAX_OUTPUT_BYTES
+            ),
+        });
+    }
+
+    Ok(())
 }
 
 /// The clip rectangle covering one element.
