@@ -60,6 +60,11 @@ url = "2"
 serde_json = { workspace = true }
 # The live suite reassembles a held screenshot to check it round trips.
 base64 = "0.22"
+# The CDP client's own tests stand up a WebSocket server in place of a browser,
+# which is the only way to exercise what happens when one misbehaves: a protocol
+# error, a command that is never answered, a socket that closes mid-call.
+tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 
 [features]
 default = []

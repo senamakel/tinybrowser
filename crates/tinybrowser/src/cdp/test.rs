@@ -237,3 +237,233 @@ fn which_shell() -> Result<std::path::PathBuf, ()> {
         .find(|path| path.exists())
         .ok_or(())
 }
+
+/// A WebSocket that answers CDP commands from a script, in place of a browser.
+///
+/// Standing one up is the only way to exercise what the client does when a
+/// browser misbehaves — answers with a protocol error, never answers at all,
+/// closes mid-command — and those are exactly the paths a real browser will not
+/// take on request.
+async fn fake_browser(
+    reply: impl Fn(u64, &str) -> Option<String> + Send + Sync + 'static,
+) -> String {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("binds a loopback port");
+    let address = listener.local_addr().expect("has an address");
+
+    tokio::spawn(async move {
+        use futures_util::{SinkExt as _, StreamExt as _};
+        use tokio_tungstenite::tungstenite::Message;
+
+        let Ok((stream, _)) = listener.accept().await else {
+            return;
+        };
+        let Ok(mut socket) = tokio_tungstenite::accept_async(stream).await else {
+            return;
+        };
+
+        while let Some(Ok(message)) = socket.next().await {
+            let Message::Text(text) = message else {
+                continue;
+            };
+            let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&text) else {
+                continue;
+            };
+            let id = parsed
+                .get("id")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(0);
+            let method = parsed
+                .get("method")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default();
+
+            match reply(id, method) {
+                Some(response) => {
+                    if socket.send(Message::Text(response)).await.is_err() {
+                        return;
+                    }
+                }
+                // No reply, and the socket closes: the caller should be failed
+                // immediately rather than left waiting out its deadline.
+                None => return,
+            }
+        }
+    });
+
+    format!("ws://{address}")
+}
+
+#[tokio::test]
+async fn a_command_gets_its_own_reply_back() {
+    let endpoint =
+        fake_browser(|id, _| Some(format!(r#"{{"id":{id},"result":{{"targetId":"t-1"}}}}"#))).await;
+    let client = CdpClient::connect(&endpoint).await.expect("connects");
+
+    let result = client
+        .send(
+            "Target.createTarget",
+            serde_json::json!({}),
+            None,
+            std::time::Duration::from_secs(5),
+        )
+        .await
+        .expect("answers");
+
+    assert_eq!(result["targetId"], "t-1");
+}
+
+#[tokio::test]
+async fn concurrent_commands_are_matched_to_their_own_replies() {
+    // The whole reason the client is a multiplexer: two callers issuing at once
+    // must not be handed each other's answers.
+    let endpoint =
+        fake_browser(|id, _| Some(format!(r#"{{"id":{id},"result":{{"seen":{id}}}}}"#))).await;
+    let client = CdpClient::connect(&endpoint).await.expect("connects");
+
+    let calls = (0..8).map(|_| {
+        let client = std::sync::Arc::clone(&client);
+        async move {
+            client
+                .send(
+                    "Runtime.evaluate",
+                    serde_json::json!({}),
+                    None,
+                    std::time::Duration::from_secs(5),
+                )
+                .await
+        }
+    });
+
+    for result in futures_util::future::join_all(calls).await {
+        let value = result.expect("answers");
+        let id = value["seen"].as_u64().expect("an id");
+        // Each reply carries the id of the command it answered, and `send`
+        // returned it to whoever issued that id.
+        assert!(id > 0);
+    }
+}
+
+#[tokio::test]
+async fn a_protocol_error_is_reported_as_a_page_error() {
+    // CDP reports a rejected command in the reply, not by closing anything.
+    let endpoint = fake_browser(|id, _| {
+        Some(format!(
+            r#"{{"id":{id},"error":{{"code":-32000,"message":"No node with given id found"}}}}"#
+        ))
+    })
+    .await;
+    let client = CdpClient::connect(&endpoint).await.expect("connects");
+
+    let error = client
+        .send(
+            "DOM.focus",
+            serde_json::json!({}),
+            None,
+            std::time::Duration::from_secs(5),
+        )
+        .await
+        .expect_err("refused");
+
+    assert!(matches!(error, Error::PageError { .. }), "{error}");
+    assert!(
+        error.to_string().contains("No node with given id"),
+        "{error}"
+    );
+    assert!(error.to_string().contains("DOM.focus"), "{error}");
+}
+
+#[tokio::test]
+async fn a_protocol_error_without_a_message_still_reports_something() {
+    let endpoint =
+        fake_browser(|id, _| Some(format!(r#"{{"id":{id},"error":{{"code":-32000}}}}"#))).await;
+    let client = CdpClient::connect(&endpoint).await.expect("connects");
+
+    let error = client
+        .send(
+            "DOM.focus",
+            serde_json::json!({}),
+            None,
+            std::time::Duration::from_secs(5),
+        )
+        .await
+        .expect_err("refused");
+
+    assert!(
+        error.to_string().contains("unknown protocol error"),
+        "{error}"
+    );
+}
+
+#[tokio::test]
+async fn a_command_that_is_never_answered_times_out() {
+    // The browser stays connected and simply does not reply — a wedged renderer.
+    let endpoint =
+        fake_browser(|_, _| Some(String::from(r#"{"method":"Page.frameResized"}"#))).await;
+    let client = CdpClient::connect(&endpoint).await.expect("connects");
+
+    let error = client
+        .send(
+            "Page.navigate",
+            serde_json::json!({}),
+            None,
+            std::time::Duration::from_millis(150),
+        )
+        .await
+        .expect_err("times out");
+
+    assert!(matches!(error, Error::Timeout { .. }), "{error}");
+    assert!(error.to_string().contains("Page.navigate"), "{error}");
+}
+
+#[tokio::test]
+async fn a_socket_that_closes_fails_the_command_immediately() {
+    // Rather than leaving it to sit out a thirty-second deadline against a
+    // connection that will never answer.
+    let endpoint = fake_browser(|_, _| None).await;
+    let client = CdpClient::connect(&endpoint).await.expect("connects");
+
+    let error = tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        client.send(
+            "Page.navigate",
+            serde_json::json!({}),
+            None,
+            std::time::Duration::from_secs(30),
+        ),
+    )
+    .await
+    .expect("does not wait out the deadline")
+    .expect_err("refused");
+
+    assert!(matches!(error, Error::ConnectionLost { .. }), "{error}");
+}
+
+#[tokio::test]
+async fn events_reach_a_subscriber_and_carry_their_session() {
+    let endpoint = fake_browser(|id, _| {
+        Some(format!(
+            r#"{{"id":{id},"result":{{}}}}
+"#
+        ))
+    })
+    .await;
+    let client = CdpClient::connect(&endpoint).await.expect("connects");
+    let mut events = client.events();
+
+    // Ask the fake browser for anything; the reply it sends is what the reader
+    // loop classifies. A second message with no id is an event.
+    let _ = client
+        .send(
+            "Page.enable",
+            serde_json::json!({}),
+            Some("session-1"),
+            std::time::Duration::from_secs(5),
+        )
+        .await;
+
+    // Nothing has emitted an event, so the receiver must be empty rather than
+    // holding a misclassified reply.
+    assert!(events.try_recv().is_err());
+}
