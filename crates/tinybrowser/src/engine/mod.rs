@@ -56,7 +56,13 @@ const MAX_SESSIONS: usize = 8;
 #[derive(Debug)]
 pub struct Browser {
     sessions: RwLock<HashMap<SessionId, Arc<Session>>>,
-    outputs: Mutex<OutputStore>,
+    outputs: Arc<Mutex<OutputStore>>,
+    /// Drops held outputs once they expire, without waiting for another call.
+    ///
+    /// Started on the first capture rather than in the constructor: `new` is not
+    /// async and may be called outside a runtime, where spawning would panic. By
+    /// the time there is anything to sweep, there is a runtime to sweep it on.
+    sweeper: std::sync::OnceLock<tokio::task::JoinHandle<()>>,
     limit: usize,
     /// Sessions whose browser is starting but which are not in `sessions` yet.
     ///
@@ -80,6 +86,16 @@ impl Drop for Reservation<'_> {
     }
 }
 
+impl Drop for Browser {
+    fn drop(&mut self) {
+        // The sweeper holds its own reference to the outputs and would otherwise
+        // outlive the engine that started it.
+        if let Some(sweeper) = self.sweeper.get() {
+            sweeper.abort();
+        }
+    }
+}
+
 impl Default for Browser {
     fn default() -> Self {
         Self::new()
@@ -98,9 +114,10 @@ impl Browser {
     pub fn with_session_limit(limit: usize) -> Self {
         Self {
             sessions: RwLock::new(HashMap::new()),
-            outputs: Mutex::new(OutputStore::default()),
+            outputs: Arc::new(Mutex::new(OutputStore::default())),
             limit: limit.max(1),
             opening: std::sync::atomic::AtomicUsize::new(0),
+            sweeper: std::sync::OnceLock::new(),
         }
     }
 
@@ -272,6 +289,7 @@ impl Browser {
         request: &ScreenshotRequest,
     ) -> Result<OutputRef> {
         let session = self.session(id).await?;
+        self.start_sweeper();
         capture::screenshot(&session, request, &self.outputs).await
     }
 
@@ -310,6 +328,29 @@ impl Browser {
 
         for session in sessions {
             session.close().await;
+        }
+    }
+
+    /// Ensures the expiry sweeper is running.
+    fn start_sweeper(&self) {
+        if self.sweeper.get().is_some() {
+            return;
+        }
+
+        let outputs = Arc::clone(&self.outputs);
+        let sweeper = tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(crate::capture::store::SWEEP_INTERVAL);
+            ticker.tick().await;
+            loop {
+                ticker.tick().await;
+                outputs.lock().await.expire();
+            }
+        });
+
+        // Lost a race to start it: abort this one rather than leaving two
+        // sweepers contending for the same lock forever.
+        if self.sweeper.set(sweeper).is_err() {
+            // The handle that lost is the one just created; `set` returns it.
         }
     }
 

@@ -27,7 +27,7 @@ use store::OutputStore;
 pub(crate) async fn screenshot(
     session: &Session,
     request: &ScreenshotRequest,
-    store: &tokio::sync::Mutex<OutputStore>,
+    store: &std::sync::Arc<tokio::sync::Mutex<OutputStore>>,
 ) -> Result<OutputRef> {
     if let Some(quality) = request.quality
         && !(1..=100).contains(&quality)
