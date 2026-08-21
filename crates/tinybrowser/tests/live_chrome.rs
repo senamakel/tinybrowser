@@ -1521,8 +1521,11 @@ async fn live_a_session_can_be_told_what_size_to_render_at() {
     let browser = Browser::new();
     let session = browser
         .open_session(SessionOptions {
+            // Narrow but not `mobile`: mobile emulation gives a page with no
+            // viewport meta tag the legacy 980px layout viewport, which is
+            // correct browser behaviour and would make this assertion about
+            // Chrome's compatibility rules rather than about the module.
             viewport: tinybrowser::Viewport {
-                mobile: true,
                 device_scale_factor: 2.0,
                 ..tinybrowser::Viewport::desktop(390, 844)
             },
