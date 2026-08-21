@@ -26,15 +26,7 @@ pub(crate) async fn read(session: &Session, request: &ReadRequest) -> Result<Pag
     let content = match request.format {
         ReadFormat::Html => html(session, request.selector.as_deref(), deadline).await?,
         ReadFormat::Text | ReadFormat::Markdown => {
-            let document = session
-                .evaluate("document", false, deadline)
-                .await
-                .map(|_| ())
-                .and(Ok(()))?;
-            let _ = document;
-
-            let extracted = extract(session, request, deadline).await?;
-            match extracted {
+            match extract(session, request, deadline).await? {
                 Value::String(text) => text,
                 Value::Null => {
                     return Err(Error::NoSuchElement {
