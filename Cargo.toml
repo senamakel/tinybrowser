@@ -22,7 +22,7 @@ version = "0.2.1"
 edition = "2024"
 rust-version = "1.88"
 license = "GPL-3.0-only"
-repository = "https://github.com/tinyhumansai/rust-template"
+repository = "https://github.com/tinyhumansai/tinybrowser"
 
 [workspace.dependencies]
 # The wire contract. `crates/tinybrowser` depends on it and re-exports it, so a
