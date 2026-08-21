@@ -49,7 +49,7 @@ mod greeting;
 mod tinybus_module;
 
 pub use error::{Error, Result};
-pub use greeting::greet;
+
 
 // The wire contract, re-exported by module rather than by item so every path
 // through this crate resolves to the same definitions the contract crate

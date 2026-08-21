@@ -31,3 +31,6 @@ pub(crate) mod endpoint;
 pub(crate) mod launch;
 
 pub(crate) use client::{CdpClient, CdpEvent};
+
+#[cfg(test)]
+mod test;
