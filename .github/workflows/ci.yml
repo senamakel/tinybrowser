@@ -20,6 +20,20 @@ jobs:
   rust:
     name: Rust
     runs-on: ubuntu-latest
+    env:
+      # A browser module is not meaningfully tested without a browser, and the
+      # coverage gate below is measured over the same run: with these unset, the
+      # protocol conversation would be both unexercised and uncovered, which is
+      # precisely the half that cannot be checked any other way.
+      #
+      # GitHub's Ubuntu runners ship Google Chrome at a path the module already
+      # looks in, so there is nothing to install.
+      TINYBROWSER_LIVE_TESTS: "1"
+      # Runners restrict unprivileged user namespaces, so Chrome has no usable
+      # sandbox here. Accepting that in a disposable CI VM is a different
+      # decision from applying it on somebody's host, which is why the module
+      # reports the condition rather than working around it by default.
+      TINYBROWSER_CHROME_ARGS: --no-sandbox
     steps:
       - uses: actions/checkout@v7
         with:
@@ -38,6 +52,31 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      # Named explicitly rather than left to the module's own discovery order.
+      # The runner has several browsers on it, including a snap-packaged
+      # `/usr/bin/chromium` that starts, says nothing, and is timed out — and a
+      # build should not go red because the search order changed under it. This
+      # also prints which browser was chosen, so a future failure says so in the
+      # log instead of costing a round trip to find out.
+      - name: Select a browser for the live tests
+        run: |
+          set -euo pipefail
+          for candidate in \
+            /usr/bin/google-chrome \
+            /usr/bin/google-chrome-stable \
+            /opt/google/chrome/chrome \
+            /usr/bin/chromium-browser \
+            /usr/bin/chromium
+          do
+            [ -x "$candidate" ] || continue
+            echo "selected $candidate"
+            "$candidate" --version || true
+            echo "TINYBROWSER_CHROME=$candidate" >> "$GITHUB_ENV"
+            exit 0
+          done
+          echo "no browser on this runner; the live tests cannot run" >&2
+          exit 1
+
       - name: Check formatting
         run: cargo fmt --all -- --check
 
@@ -54,27 +93,27 @@ jobs:
         run: cargo test
 
       # `cargo build --all-targets` only *compiles* an example. `AGENTS.md`
-      # promises `cargo run -p template --example basic` works, and a compiled
+      # promises `cargo run -p tinybrowser --example basic` works, and a compiled
       # example can still fail on its first line.
       - name: Run the bundled example
-        run: cargo run -p template --example basic
+        run: cargo run -p tinybrowser --example basic
 
-      # `crates/template-bus` exists so a host can name the payload types
+      # `crates/tinybrowser-bus` exists so a host can name the payload types
       # without compiling the module. That promise is invisible in a diff,
       # because a forbidden dependency arrives transitively through a feature
       # someone enabled one crate away — so it is asserted rather than
       # documented.
       #
-      # The FORWARD form is required. `cargo tree -i <crate> -p template-bus`
+      # The FORWARD form is required. `cargo tree -i <crate> -p tinybrowser-bus`
       # discards the `-p` scope, prints the whole-workspace inverse tree, and
       # exits 0 looking clean even when this crate is the one at fault.
       - name: Assert the contract crate stays transport-free
         run: |
           set -euo pipefail
-          forbidden="$(cargo tree -p template-bus -e normal,build --prefix none \
+          forbidden="$(cargo tree -p tinybrowser-bus -e normal,build --prefix none \
             | grep -Ei 'tinybus|tokio|reqwest|ureq|hyper|rusqlite|git2' || true)"
           if [ -n "$forbidden" ]; then
-            echo "template-bus pulled in a dependency its manifest forbids:" >&2
+            echo "tinybrowser-bus pulled in a dependency its manifest forbids:" >&2
             echo "$forbidden" >&2
             echo >&2
             echo "The contract is what a host compiles against. It must stay free" >&2
@@ -128,7 +167,7 @@ jobs:
         run: |
           set -euo pipefail
           msrv="$(cargo metadata --format-version 1 --no-deps \
-            | jq -r '.packages[] | select(.name == "template") | .rust_version')"
+            | jq -r '.packages[] | select(.name == "tinybrowser") | .rust_version')"
           if [[ -z "$msrv" || "$msrv" == "null" ]]; then
             echo "workspace.package.rust-version is not set in Cargo.toml" >&2
             exit 1
