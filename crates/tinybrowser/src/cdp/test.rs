@@ -155,19 +155,19 @@ async fn connecting_to_a_socket_that_is_not_there_is_reported() {
 #[tokio::test]
 async fn launching_something_that_is_not_a_browser_reports_what_it_printed() {
     // A path that exists and runs but is not Chrome. The banner is the only
-    // account of what happened, so it has to reach the caller.
+    // account of what happened — it rejects the browser flags and exits — so the
+    // banner has to reach the caller rather than being flattened into "did not
+    // start".
     let Ok(shell) = which_shell() else { return };
-    let error = launch(
-        &shell,
-        true,
-        None,
-        &["-c".to_string(), "echo nope >&2".to_string()],
-    )
-    .await
-    .expect_err("refused");
+    let error = launch(&shell, true, None, &[]).await.expect_err("refused");
 
     assert!(matches!(error, Error::BrowserUnavailable { .. }), "{error}");
-    assert!(error.to_string().contains("nope"), "{error}");
+    assert!(
+        error
+            .to_string()
+            .contains("without reporting a devtools url:"),
+        "the banner was dropped: {error}"
+    );
 }
 
 #[tokio::test]
