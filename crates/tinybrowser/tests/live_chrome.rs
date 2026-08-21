@@ -1671,8 +1671,13 @@ async fn live_pressing_enter_in_a_form_settles_its_submission() {
         return;
     }
     let destination = serve("<h1>Submitted</h1>").await;
+    // With an explicit submit button rather than relying on implicit submission,
+    // whose rules depend on how many fields a form has and are not what this is
+    // testing.
     let (browser, session) = on(&format!(
-        "<form action='{destination}' method='get'><input id='q' name='q'></form>"
+        "<form action='{destination}' method='get'>\
+           <input id='q' name='q'><button type='submit'>Go</button>\
+         </form>"
     ))
     .await;
 
