@@ -56,18 +56,30 @@ const STARTUP_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// The paths a Chrome or Chromium is conventionally installed at.
 ///
-/// Ordered so that a browser built for automation wins over the user's daily
-/// browser: launching the latter with a fresh profile is technically fine and
-/// socially alarming, since it can surface a second window in front of somebody
-/// who did not ask for one.
+/// Ordered by how likely each is to *work unattended*, which is not the same as
+/// how likely it is to be somebody's preferred browser.
+///
+/// On Linux that means an ordinary packaged Chrome or Chromium first and
+/// anything snap-packaged last. `/usr/bin/chromium` on Ubuntu is usually a shim
+/// that execs the snap, and a confined snap is a poor automation target: it
+/// cannot reach a profile directory under `/tmp`, and its first launch can spend
+/// longer setting itself up than a browser is given to report its debugging
+/// socket. The failure that produces — a process that starts, says nothing, and
+/// is eventually timed out — looks like a bug in this module rather than a
+/// packaging decision, so the shim is tried only when nothing else is present.
+///
+/// A host that cares which browser runs should not be relying on this list at
+/// all: [`EXECUTABLE_ENV`] names one, and an endpoint avoids launching entirely.
 #[cfg(target_os = "linux")]
 const CANDIDATES: &[&str] = &[
-    "/usr/bin/chromium",
-    "/usr/bin/chromium-browser",
     "/usr/bin/google-chrome",
     "/usr/bin/google-chrome-stable",
-    "/snap/bin/chromium",
+    "/opt/google/chrome/chrome",
+    "/usr/bin/chromium-browser",
     "/usr/bin/brave-browser",
+    // Snap-packaged, and last for the reasons above.
+    "/usr/bin/chromium",
+    "/snap/bin/chromium",
 ];
 
 #[cfg(target_os = "macos")]

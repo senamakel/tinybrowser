@@ -509,7 +509,7 @@ fn an_environment_path_that_does_not_exist_is_reported_not_fallen_back_from() {
 #[test]
 fn with_no_override_a_conventional_path_is_taken() {
     let candidate = if cfg!(target_os = "linux") {
-        "/usr/bin/chromium"
+        "/usr/bin/google-chrome"
     } else if cfg!(target_os = "macos") {
         "/Applications/Chromium.app/Contents/MacOS/Chromium"
     } else {
@@ -617,4 +617,27 @@ fn a_profile_directory_is_created_where_it_was_asked_for() {
     assert_ne!(profile, profile_in(&base).expect("creates another"));
 
     let _ = std::fs::remove_dir_all(&profile);
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn a_snap_shim_is_the_last_resort_rather_than_the_first_choice() {
+    // `/usr/bin/chromium` on Ubuntu usually execs a confined snap, which cannot
+    // reach a profile directory under `/tmp` and can spend longer starting than
+    // it is given to report its socket. Preferring it produced a browser that
+    // started, said nothing, and timed out — a failure that reads as this
+    // module's fault rather than a packaging decision.
+    let ordinary = resolve_executable(None, None, &|path: &std::path::Path| {
+        matches!(
+            path.to_string_lossy().as_ref(),
+            "/usr/bin/google-chrome" | "/usr/bin/chromium"
+        )
+    })
+    .expect("found");
+
+    assert_eq!(ordinary, std::path::PathBuf::from("/usr/bin/google-chrome"));
+
+    // And it is still found when it is genuinely all there is.
+    let only_snap = resolve_executable(None, None, &only("/usr/bin/chromium")).expect("found");
+    assert_eq!(only_snap, std::path::PathBuf::from("/usr/bin/chromium"));
 }
