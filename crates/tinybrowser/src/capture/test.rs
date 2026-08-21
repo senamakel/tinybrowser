@@ -195,7 +195,7 @@ fn an_output_expires_once_its_time_to_live_has_passed() {
 #[test]
 fn an_output_within_its_time_to_live_survives() {
     let (mut store, id) = store_with(b"hello".to_vec());
-    store.age(TTL - std::time::Duration::from_secs(1));
+    store.age(TTL.saturating_sub(std::time::Duration::from_secs(1)));
 
     assert!(store.read(&id, 0, 1024).is_ok());
 }
