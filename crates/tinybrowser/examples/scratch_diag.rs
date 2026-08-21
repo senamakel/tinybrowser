@@ -5,10 +5,17 @@ use tinybrowser::{Action, Browser, EvaluateRequest, NavigateRequest, SessionOpti
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let b = Browser::new();
     let s = b.open_session(SessionOptions::default()).await?;
-    b.navigate(&s.id, &NavigateRequest::new("https://example.com")).await?;
+    b.navigate(&s.id, &NavigateRequest::new("https://example.com"))
+        .await?;
 
     let outcome = b
-        .perform(&s.id, &Action::Click { target: Target::selector("a"), new_tab: false })
+        .perform(
+            &s.id,
+            &Action::Click {
+                target: Target::selector("a"),
+                new_tab: false,
+            },
+        )
         .await?;
     println!("after click: {}", outcome.page.url);
 
