@@ -252,19 +252,61 @@ pub(crate) async fn launch(
 }
 
 /// Reads Chrome's startup banner until it names the debugger socket.
+///
+/// When the browser dies instead, the banner is the only account of why, so the
+/// first few lines of it are kept and handed to [`diagnose`] rather than
+/// discarded in favour of "it did not start".
 async fn read_websocket_url(stderr: tokio::process::ChildStderr) -> Result<String> {
     const MARKER: &str = "DevTools listening on ";
+    /// Enough to hold the fatal line and its context, and few enough that a
+    /// browser logging steadily cannot grow this without bound.
+    const KEPT_LINES: usize = 12;
 
     let mut lines = BufReader::new(stderr).lines();
+    let mut banner: Vec<String> = Vec::with_capacity(KEPT_LINES);
+
     while let Ok(Some(line)) = lines.next_line().await {
         if let Some(url) = line.split_once(MARKER) {
             return Ok(url.1.trim().to_string());
         }
+        if banner.len() < KEPT_LINES {
+            banner.push(line);
+        }
     }
 
-    Err(Error::browser_unavailable(
-        "browser exited during startup without reporting a devtools url".to_string(),
-    ))
+    Err(Error::browser_unavailable(diagnose(&banner)))
+}
+
+/// Turns what the browser printed on its way out into something actionable.
+///
+/// The sandbox case is called out by name because it is the one an operator
+/// will actually hit — a container without `SYS_ADMIN`, or an Ubuntu 23.10 or
+/// later host, where unprivileged user namespaces are restricted by AppArmor —
+/// and because the raw stack trace Chrome prints buries the one line that says
+/// what to do. The remedy is deliberately *reported* rather than applied:
+/// `--no-sandbox` removes the renderer's isolation from the pages it visits,
+/// which is not a default this module gets to choose on a host's behalf.
+fn diagnose(banner: &[String]) -> String {
+    if banner.iter().any(|line| line.contains("No usable sandbox")) {
+        return "browser could not start because this host has no usable sandbox: unprivileged                 user namespaces are restricted, which is the default on Ubuntu 23.10 and later                 and in containers without the right capabilities. Either allow them for this                 binary, or accept the reduced isolation by adding "--no-sandbox" to the                 session's args"
+            .to_string();
+    }
+
+    let printed: Vec<&str> = banner
+        .iter()
+        .map(String::as_str)
+        .filter(|line| !line.trim().is_empty())
+        .take(3)
+        .collect();
+
+    if printed.is_empty() {
+        "browser exited during startup without reporting a devtools url".to_string()
+    } else {
+        format!(
+            "browser exited during startup without reporting a devtools url: {}",
+            printed.join(" | ")
+        )
+    }
 }
 
 /// A private profile directory for one launched browser.
