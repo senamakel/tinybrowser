@@ -52,40 +52,49 @@ use tinybrowser::{
     ScreenshotRequest, SessionInfo, SessionOptions, SnapshotRequest, Target, WaitUntil,
 };
 
-/// A page served as a `data:` URL, so no test depends on the network.
-fn page(body: &str) -> String {
-    format!(
-        "data:text/html,{}",
-        urlencode(&format!(
-            "<!doctype html><html><head><title>tinybrowser</title></head><body>{body}</body></html>"
-        ))
-    )
-}
+/// Serves `body` as a complete HTML document on loopback, and returns its URL.
+///
+/// One connection per request and no routing: every test wants exactly one page,
+/// and a server with fewer moving parts is one that cannot fail in a way that
+/// looks like the module failing.
+async fn serve(body: &str) -> String {
+    let document = format!(
+        "<!doctype html><html><head><title>tinybrowser</title></head><body>{body}</body></html>"
+    );
 
-/// The subset of percent-encoding a `data:` URL needs.
-fn urlencode(raw: &str) -> String {
-    raw.chars()
-        .map(|character| match character {
-            'A'..='Z'
-            | 'a'..='z'
-            | '0'..='9'
-            | '-'
-            | '_'
-            | '.'
-            | '~'
-            | '!'
-            | '*'
-            | '('
-            | ')'
-            | '\'' => character.to_string(),
-            other => other
-                .to_string()
-                .as_bytes()
-                .iter()
-                .map(|byte| format!("%{byte:02X}"))
-                .collect(),
-        })
-        .collect()
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("binds a loopback port");
+    let address = listener.local_addr().expect("has an address");
+
+    tokio::spawn(async move {
+        loop {
+            let Ok((mut stream, _)) = listener.accept().await else {
+                return;
+            };
+            let document = document.clone();
+            tokio::spawn(async move {
+                use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+
+                // Read and discard the request: a server that replies without
+                // draining can have the write fail on it.
+                let mut scratch = [0_u8; 2048];
+                let _ = stream.read(&mut scratch).await;
+
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\n\
+                     Content-Type: text/html; charset=utf-8\r\n\
+                     Content-Length: {}\r\n\
+                     Connection: close\r\n\r\n{document}",
+                    document.len()
+                );
+                let _ = stream.write_all(response.as_bytes()).await;
+                let _ = stream.shutdown().await;
+            });
+        }
+    });
+
+    format!("http://{address}/")
 }
 
 /// The session options these tests open with.
