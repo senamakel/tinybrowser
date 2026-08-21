@@ -50,6 +50,14 @@ const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 /// `load` event underneath it is what actually settles the navigation.
 const NETWORK_IDLE_GRACE: Duration = Duration::from_secs(2);
 
+/// How long to watch for a navigation that an input event started.
+///
+/// A click on a link or a submit button starts its navigation almost at once —
+/// the browser handles the input event and commits — so this only has to be long
+/// enough to see it begin. Most clicks start nothing at all and pay the whole
+/// period for nothing, which is why it is this short rather than generous.
+const INPUT_NAVIGATION_GRACE: Duration = Duration::from_millis(300);
+
 /// One open browser session.
 #[derive(Debug)]
 pub(crate) struct Session {
@@ -214,6 +222,94 @@ impl Session {
     /// The refs the last snapshot minted.
     pub(crate) fn refs(&self) -> &Mutex<RefMap> {
         &self.refs
+    }
+
+    /// A subscription to everything the browser says from now on.
+    ///
+    /// Taken *before* the action that might produce the event being waited for:
+    /// a subscription opened afterwards can miss an event that has already
+    /// happened, and the wait then sits out its whole deadline for something in
+    /// the past.
+    pub(crate) fn events(&self) -> tokio::sync::broadcast::Receiver<crate::cdp::CdpEvent> {
+        self.client.events()
+    }
+
+    /// Waits for a navigation that an input event started, if one started.
+    ///
+    /// # Why an input event has to be followed
+    ///
+    /// Dispatching a click returns as soon as the browser has accepted the
+    /// event, not when the page has finished reacting to it. For a click on a
+    /// link or a submit button that leaves a window in which the old document is
+    /// still the current one, and anything done next — reading the page, taking
+    /// a snapshot, acting on a ref — happens against a page that is on its way
+    /// out. An agent that clicks "submit" and reads the result would read the
+    /// form it just submitted.
+    ///
+    /// It also closes a staleness hole. Refs name nodes in a document; a
+    /// navigation replaces it. Without this, a ref minted before a click that
+    /// navigated stays resolvable afterwards, which is precisely the "resolves
+    /// to whatever now occupies that position" failure that
+    /// [`crate::Error::StaleRef`] exists to prevent.
+    ///
+    /// Errors are deliberately not reported: the caller's action succeeded. A
+    /// navigation that fails to settle leaves the page wherever it got to, and
+    /// the [`PageState`] returned with the outcome says where that is.
+    pub(crate) async fn settle_after_input(
+        &self,
+        events: tokio::sync::broadcast::Receiver<crate::cdp::CdpEvent>,
+    ) {
+        let mut events = events;
+
+        // A new document beginning is what distinguishes a click that navigated
+        // from one that opened a menu. A same-document change — a `pushState`
+        // router — emits no `init`, and correctly waits for nothing.
+        if tokio::time::timeout(
+            INPUT_NAVIGATION_GRACE,
+            self.await_lifecycle(&mut events, "init"),
+        )
+        .await
+        .is_err()
+        {
+            return;
+        }
+
+        let _ = tokio::time::timeout(
+            self.deadline(None),
+            self.await_lifecycle(&mut events, "load"),
+        )
+        .await;
+
+        // The document those refs named is gone.
+        self.refs
+            .lock()
+            .await
+            .replace(std::collections::HashMap::new());
+    }
+
+    /// Waits for one lifecycle event on this session's page.
+    async fn await_lifecycle(
+        &self,
+        events: &mut tokio::sync::broadcast::Receiver<crate::cdp::CdpEvent>,
+        name: &str,
+    ) {
+        loop {
+            let event = match events.recv().await {
+                Ok(event) => event,
+                // Lagged: the page emitted more than the buffer holds, possibly
+                // including this one. The caller's deadline decides rather than
+                // this loop waiting forever for an event already dropped.
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
+            };
+
+            if event.session_id.as_deref() == Some(self.page.as_str())
+                && event.method == "Page.lifecycleEvent"
+                && event.params.get("name").and_then(Value::as_str) == Some(name)
+            {
+                return;
+            }
+        }
     }
 
     /// Evaluates `expression` in the page and returns its value.
