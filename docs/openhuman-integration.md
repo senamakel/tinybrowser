@@ -43,8 +43,19 @@ host links the contract crate — which it should, and which is the next point.
 # The wire contract for the tinybrowser module: member names and payload types.
 # Two pure-Rust dependencies, no transport, no browser — the whole reason the
 # module is loadable rather than linked.
-tinybrowser-bus = { git = "https://github.com/tinyhumansai/tinybrowser" }
+#
+# Pinned to the tag the registry entry above downloads its artifact from. An
+# unpinned git dependency resolves to whatever the default branch holds at build
+# time, so a host would eventually compile against payload types newer than the
+# module it actually loads — and the mismatch surfaces as a decode error at
+# runtime, in a call, rather than as a build failure.
+tinybrowser-bus = { git = "https://github.com/tinyhumansai/tinybrowser", tag = "v<version>" }
 ```
+
+Move the tag and the registry entry's `version` together, in one commit. They are
+the same decision written twice, and `ContractVersion` is what catches it when
+they drift anyway — but catching it in review is cheaper than catching it in a
+session.
 
 `tinybrowser-bus`, never `tinybrowser`. The second one is the engine, and
 linking it would put a WebSocket client, a TLS stack and a CDP surface back into
