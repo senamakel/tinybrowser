@@ -114,3 +114,33 @@ fn session_info_round_trips() {
         info
     );
 }
+
+#[test]
+fn a_session_id_is_reachable_from_both_string_forms() {
+    assert_eq!(SessionId::from("s-1".to_string()), SessionId::new("s-1"));
+    assert_eq!(SessionId::from("s-1"), SessionId::new("s-1"));
+}
+
+#[test]
+fn session_ids_order_and_hash_so_a_host_can_key_by_them() {
+    let mut ids = vec![SessionId::new("s-2"), SessionId::new("s-1")];
+    ids.sort();
+
+    assert_eq!(ids, vec![SessionId::new("s-1"), SessionId::new("s-2")]);
+    assert_eq!(
+        std::collections::HashSet::from([SessionId::new("s-1"), SessionId::new("s-1")]).len(),
+        1
+    );
+}
+
+#[test]
+fn a_viewport_can_be_built_for_a_phone() {
+    let phone = Viewport {
+        mobile: true,
+        device_scale_factor: 3.0,
+        ..Viewport::desktop(390, 844)
+    };
+
+    assert!(phone.mobile);
+    assert_ne!(phone, Viewport::default());
+}

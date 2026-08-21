@@ -78,3 +78,56 @@ fn chunks_carry_base64_and_say_where_they_end() {
         chunk
     );
 }
+
+#[test]
+fn an_output_id_is_reachable_from_both_string_forms() {
+    // A host holds these as `String` after a decode and as `&str` from a
+    // literal; both conversions exist so neither call site has to know.
+    assert_eq!(OutputId::from("o-1".to_string()), OutputId::new("o-1"));
+    assert_eq!(OutputId::from("o-1"), OutputId::new("o-1"));
+    assert_eq!(OutputId::new("o-1").as_str(), "o-1");
+}
+
+#[test]
+fn output_ids_order_and_hash_so_a_host_can_key_by_them() {
+    let mut ids = vec![OutputId::new("o-2"), OutputId::new("o-1")];
+    ids.sort();
+
+    assert_eq!(ids, vec![OutputId::new("o-1"), OutputId::new("o-2")]);
+    assert_eq!(
+        std::collections::HashSet::from([OutputId::new("o-1"), OutputId::new("o-1")]).len(),
+        1
+    );
+}
+
+#[test]
+fn a_screenshot_request_round_trips_every_field() {
+    let request = ScreenshotRequest {
+        target: Some(crate::Target::selector("#chart")),
+        full_page: true,
+        format: ImageFormat::Webp,
+        quality: Some(60),
+    };
+    let encoded = serde_json::to_value(&request).expect("serializes");
+
+    assert_eq!(encoded["format"], json!("webp"));
+    assert_eq!(encoded["target"]["kind"], json!("selector"));
+    assert_eq!(
+        serde_json::from_value::<ScreenshotRequest>(encoded).expect("deserializes"),
+        request
+    );
+}
+
+#[test]
+fn image_formats_deserialize_from_their_wire_spellings() {
+    for (wire, format) in [
+        ("png", ImageFormat::Png),
+        ("jpeg", ImageFormat::Jpeg),
+        ("webp", ImageFormat::Webp),
+    ] {
+        assert_eq!(
+            serde_json::from_value::<ImageFormat>(json!(wire)).expect("deserializes"),
+            format
+        );
+    }
+}
