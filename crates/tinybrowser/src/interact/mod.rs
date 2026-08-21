@@ -62,18 +62,11 @@ pub(crate) async fn perform(session: &Session, action: &Action) -> Result<Action
             acted(session, Some(target)).await
         }
         Action::Hover { target } => {
-            let point = click_point(session, target).await?;
-            session
-                .send(
-                    "Input.dispatchMouseEvent",
-                    json!({ "type": "mouseMoved", "x": point.0, "y": point.1 }),
-                )
-                .await?;
+            hover(session, target).await?;
             acted(session, Some(target)).await
         }
         Action::Focus { target } => {
-            let node = resolve::resolve(session, target).await?;
-            session.send("DOM.focus", json!({ "backendNodeId": node })).await?;
+            focus(session, target).await?;
             acted(session, Some(target)).await
         }
         Action::Fill { target, value } => {
@@ -86,8 +79,7 @@ pub(crate) async fn perform(session: &Session, action: &Action) -> Result<Action
             delay_ms,
         } => {
             if let Some(target) = target {
-                let node = resolve::resolve(session, target).await?;
-                session.send("DOM.focus", json!({ "backendNodeId": node })).await?;
+                focus(session, target).await?;
             }
             type_text(session, text, *delay_ms).await?;
             acted(session, target.as_ref()).await
@@ -97,27 +89,11 @@ pub(crate) async fn perform(session: &Session, action: &Action) -> Result<Action
             acted(session, None).await
         }
         Action::Select { target, values } => {
-            let node = resolve::resolve(session, target).await?;
-            session
-                .call_on_node(
-                    node,
-                    script::SELECT_OPTIONS,
-                    vec![json!(values)],
-                    session.deadline(None),
-                )
-                .await?;
+            select(session, target, values).await?;
             acted(session, Some(target)).await
         }
         Action::Check { target, checked } => {
-            let node = resolve::resolve(session, target).await?;
-            let current = session
-                .call_on_node(node, script::CHECKED, Vec::new(), session.deadline(None))
-                .await?;
-            // Clicking unconditionally would toggle a box that is already in the
-            // wanted state, which is the opposite of what was asked for.
-            if current.as_bool().unwrap_or(false) != *checked {
-                click(session, target, false, 1).await?;
-            }
+            check(session, target, *checked).await?;
             acted(session, Some(target)).await
         }
         Action::Scroll {
@@ -129,36 +105,17 @@ pub(crate) async fn perform(session: &Session, action: &Action) -> Result<Action
             acted(session, target.as_ref()).await
         }
         Action::GetText { target } => {
-            let node = resolve::resolve(session, target).await?;
-            let text = session
-                .call_on_node(node, script::TEXT, Vec::new(), session.deadline(None))
-                .await?;
+            let text = on_node(session, target, script::TEXT, Vec::new()).await?;
             read(session, target, text).await
         }
         Action::GetAttribute { target, attribute } => {
-            let node = resolve::resolve(session, target).await?;
-            let value = session
-                .call_on_node(
-                    node,
-                    script::ATTRIBUTE,
-                    vec![json!(attribute)],
-                    session.deadline(None),
-                )
-                .await?;
+            let value =
+                on_node(session, target, script::ATTRIBUTE, vec![json!(attribute)]).await?;
             read(session, target, value).await
         }
         Action::IsVisible { target } => {
-            // A target that does not resolve is not visible; that is an answer,
-            // not a failure. Returning an error here would make the one action
-            // whose job is to test for absence unable to report it.
-            let visible = match resolve::resolve(session, target).await {
-                Ok(node) => session
-                    .call_on_node(node, script::IS_VISIBLE, Vec::new(), session.deadline(None))
-                    .await
-                    .unwrap_or(Value::Bool(false)),
-                Err(_) => Value::Bool(false),
-            };
-            read(session, target, visible).await
+            let visible = is_visible(session, target).await;
+            read(session, target, Value::Bool(visible)).await
         }
         Action::WaitFor {
             target,
@@ -180,17 +137,89 @@ pub(crate) async fn perform(session: &Session, action: &Action) -> Result<Action
         }
         Action::Back => history(session, -1).await,
         Action::Forward => history(session, 1).await,
-        Action::Reload => {
-            session.send("Page.reload", json!({})).await?;
-            // The refs belong to the document being replaced.
-            session
-                .refs()
-                .lock()
-                .await
-                .replace(std::collections::HashMap::new());
-            acted(session, None).await
-        }
+        Action::Reload => reload(session).await,
     }
+}
+
+/// Runs one of the [`script`] functions against a target.
+async fn on_node(
+    session: &Session,
+    target: &Target,
+    function: &str,
+    args: Vec<Value>,
+) -> Result<Value> {
+    let node = resolve::resolve(session, target).await?;
+    session
+        .call_on_node(node, function, args, session.deadline(None))
+        .await
+}
+
+/// Moves the pointer over an element, firing the handlers a menu needs.
+async fn hover(session: &Session, target: &Target) -> Result<()> {
+    let (x, y) = click_point(session, target).await?;
+    session
+        .send(
+            "Input.dispatchMouseEvent",
+            json!({ "type": "mouseMoved", "x": x, "y": y }),
+        )
+        .await?;
+    Ok(())
+}
+
+/// Gives an element keyboard focus without clicking it.
+async fn focus(session: &Session, target: &Target) -> Result<()> {
+    let node = resolve::resolve(session, target).await?;
+    session
+        .send("DOM.focus", json!({ "backendNodeId": node }))
+        .await?;
+    Ok(())
+}
+
+/// Chooses options in a `<select>`.
+async fn select(session: &Session, target: &Target, values: &[String]) -> Result<()> {
+    on_node(session, target, script::SELECT_OPTIONS, vec![json!(values)]).await?;
+    Ok(())
+}
+
+/// Leaves a checkbox or radio in the wanted state.
+async fn check(session: &Session, target: &Target, checked: bool) -> Result<()> {
+    let current = on_node(session, target, script::CHECKED, Vec::new()).await?;
+
+    // Clicking unconditionally would toggle a box that is already in the wanted
+    // state, which is the opposite of what was asked for.
+    if current.as_bool().unwrap_or(false) != checked {
+        click(session, target, false, 1).await?;
+    }
+    Ok(())
+}
+
+/// Whether a target is present and rendered.
+///
+/// A target that does not resolve is not visible; that is an answer, not a
+/// failure. Returning an error here would make the one action whose job is to
+/// test for absence unable to report it.
+async fn is_visible(session: &Session, target: &Target) -> bool {
+    on_node(session, target, script::IS_VISIBLE, Vec::new())
+        .await
+        .ok()
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false)
+}
+
+/// Reloads the page and retires the refs the old document minted.
+async fn reload(session: &Session) -> Result<ActionOutcome> {
+    session.send("Page.reload", json!({})).await?;
+    retire_refs(session).await;
+    acted(session, None).await
+}
+
+/// Retires every outstanding ref, because the document they named is gone.
+async fn retire_refs(session: &Session) {
+    session
+        .refs()
+        .lock()
+        .await
+        .replace(std::collections::HashMap::new());
 }
 
 /// Scrolls to the element, checks nothing covers it, and dispatches a click.
@@ -482,11 +511,7 @@ async fn history(session: &Session, offset: i64) -> Result<ActionOutcome> {
     session
         .send("Page.navigateToHistoryEntry", json!({ "entryId": entry }))
         .await?;
-    session
-        .refs()
-        .lock()
-        .await
-        .replace(std::collections::HashMap::new());
+    retire_refs(session).await;
 
     acted(session, None).await
 }
