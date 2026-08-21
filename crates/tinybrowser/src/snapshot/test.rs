@@ -273,11 +273,7 @@ fn a_cyclic_tree_terminates() {
 
 #[test]
 fn an_empty_tree_renders_to_nothing_rather_than_failing() {
-    let rendered = render(&[], &SnapshotRequest::default());
-
-    assert!(rendered.tree.is_empty());
-    assert!(rendered.refs.is_empty());
-    assert!(!rendered.truncated);
+    assert!(render(&[], &SnapshotRequest::default(), None).is_none());
 }
 
 #[test]
