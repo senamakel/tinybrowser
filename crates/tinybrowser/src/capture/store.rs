@@ -42,13 +42,13 @@ const TTL: Duration = Duration::from_secs(300);
 const MAX_CHUNK: u64 = 4 * 1024 * 1024;
 
 /// One held output.
+///
+/// Only the bytes and when they arrived: the size, digest, and dimensions went
+/// out on the [`OutputRef`] when the output was stored, and keeping a second
+/// copy here would be two places for them to disagree.
 #[derive(Debug)]
 struct Held {
     bytes: Vec<u8>,
-    media_type: String,
-    width: u32,
-    height: u32,
-    sha256: String,
     stored: Instant,
 }
 
@@ -109,10 +109,6 @@ impl OutputStore {
             id,
             Held {
                 bytes,
-                media_type: media_type.to_string(),
-                width,
-                height,
-                sha256,
                 stored: Instant::now(),
             },
         );
@@ -161,17 +157,10 @@ impl OutputStore {
         self.held.remove(id);
     }
 
-    /// The handle for a held output, for tests and diagnostics.
+    /// Whether an output is still held.
     #[cfg(test)]
-    pub(crate) fn handle(&self, id: &OutputId) -> Option<OutputRef> {
-        self.held.get(id).map(|held| OutputRef {
-            id: id.clone(),
-            total_bytes: held.bytes.len() as u64,
-            sha256: held.sha256.clone(),
-            media_type: held.media_type.clone(),
-            width: held.width,
-            height: held.height,
-        })
+    pub(crate) fn holds(&self, id: &OutputId) -> bool {
+        self.held.contains_key(id)
     }
 
     /// How many outputs are held.

@@ -39,6 +39,7 @@ impl RefMap {
     }
 
     /// The sequence of the snapshot currently minting refs.
+    #[cfg(test)]
     pub(crate) fn sequence(&self) -> u64 {
         self.sequence
     }

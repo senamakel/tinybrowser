@@ -132,7 +132,7 @@ fn releasing_removes_it() {
     store.release(&id);
 
     assert_eq!(store.len(), 0);
-    assert!(store.handle(&id).is_none());
+    assert!(!store.holds(&id));
     assert!(store.read(&id, 0, 10).is_err());
 }
 
@@ -160,8 +160,8 @@ fn the_store_evicts_the_oldest_rather_than_refusing_the_newest() {
     }
 
     assert!(store.len() <= 16);
-    assert!(store.handle(&first.id).is_none(), "the oldest survived");
-    assert!(store.handle(&newest.id).is_some(), "the newest was evicted");
+    assert!(!store.holds(&first.id), "the oldest survived");
+    assert!(store.holds(&newest.id), "the newest was evicted");
 }
 
 #[test]
