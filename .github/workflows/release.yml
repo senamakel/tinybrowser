@@ -24,7 +24,7 @@ env:
   # The workspace member that ships as the loadable module. Its package name is
   # the artifact name and the library name; `crates/tinybrowser-bus` rides along on
   # the same inherited version and is not packaged separately.
-  RELEASE_PACKAGE: template
+  RELEASE_PACKAGE: tinybrowser
 
 jobs:
   prepare:
@@ -270,7 +270,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $libraryName = $env:CRATE_NAME.Replace('-', '_')
           $module = "target/release/$libraryName.dll"
-          $verifyRoot = Join-Path $env:RUNNER_TEMP 'template-module-verify'
+          $verifyRoot = Join-Path $env:RUNNER_TEMP 'tinybrowser-module-verify'
           New-Item -ItemType Directory -Force $verifyRoot | Out-Null
 
           $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
