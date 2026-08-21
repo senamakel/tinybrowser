@@ -15,6 +15,21 @@
 //! `data:` URL built in the test, so nothing here touches the network, and no
 //! assertion depends on a website that can change underneath it.
 //!
+//! # They fail rather than skip
+//!
+//! Enabling the feature is the opt-in. Having opted in, a run that cannot find a
+//! browser fails: a suite that quietly skips reports green for a build in which
+//! nothing was checked, which is worse than no suite at all.
+//!
+//! On a host where Chrome needs extra flags — no usable sandbox, most often —
+//! pass them through:
+//!
+//! ```sh
+//! TINYBROWSER_CHROME=/path/to/chrome \
+//! TINYBROWSER_TEST_ARGS=--no-sandbox \
+//!   cargo test -p tinybrowser --features live-chrome
+//! ```
+//!
 //! # What they are for
 //!
 //! The unit suites cover every decision this crate makes *around* the protocol.
@@ -58,29 +73,40 @@ fn urlencode(raw: &str) -> String {
         .collect()
 }
 
-/// An engine with one session on `body`, or `None` when this host has no
-/// browser.
-async fn on(body: &str) -> Option<(Browser, SessionInfo)> {
+/// The session options these tests open with.
+///
+/// `TINYBROWSER_TEST_ARGS` is how a host whose Chrome needs extra flags supplies
+/// them without those flags becoming this module's defaults.
+fn options() -> SessionOptions {
+    SessionOptions {
+        args: std::env::var("TINYBROWSER_TEST_ARGS")
+            .unwrap_or_default()
+            .split_whitespace()
+            .map(str::to_string)
+            .collect(),
+        ..SessionOptions::default()
+    }
+}
+
+/// An engine with one session on `body`.
+async fn on(body: &str) -> (Browser, SessionInfo) {
     let browser = Browser::new();
-    let session = match browser.open_session(SessionOptions::default()).await {
-        Ok(session) => session,
-        Err(Error::BrowserUnavailable { .. }) => return None,
-        Err(error) => panic!("opening a session failed: {error}"),
-    };
+    let session = browser
+        .open_session(options())
+        .await
+        .expect("a browser is available; see this file's docs");
 
     browser
         .navigate(&session.id, &NavigateRequest::new(page(body)))
         .await
         .expect("navigates");
 
-    Some((browser, session))
+    (browser, session)
 }
 
 #[tokio::test]
 async fn live_navigating_reports_where_the_page_landed() {
-    let Some((browser, session)) = on("<h1>Hello</h1>").await else {
-        return;
-    };
+    let (browser, session) = on("<h1>Hello</h1>").await;
 
     let state = browser
         .navigate(
@@ -103,14 +129,9 @@ async fn live_navigating_reports_where_the_page_landed() {
 async fn live_a_snapshot_ref_resolves_to_the_element_it_named() {
     // The single most important property in the crate: an agent acts on the ref
     // it read, and the node behind it is the one the snapshot described.
-    let Some((browser, session)) = on(
-        "<button id='a'>Alpha</button><button id='b'>Beta</button>\
+    let (browser, session) = on("<button id='a'>Alpha</button><button id='b'>Beta</button>\
          <script>document.body.onclick = (e) => { document.title = e.target.id; };</script>",
-    )
-    .await
-    else {
-        return;
-    };
+    ).await;
 
     let snapshot = browser
         .snapshot(&session.id, &SnapshotRequest::interactive())
@@ -140,9 +161,7 @@ async fn live_a_snapshot_ref_resolves_to_the_element_it_named() {
 
 #[tokio::test]
 async fn live_a_ref_from_a_previous_snapshot_is_refused() {
-    let Some((browser, session)) = on("<button>Alpha</button>").await else {
-        return;
-    };
+    let (browser, session) = on("<button>Alpha</button>").await;
 
     let first = browser
         .snapshot(&session.id, &SnapshotRequest::interactive())
@@ -177,14 +196,9 @@ async fn live_a_ref_from_a_previous_snapshot_is_refused() {
 async fn live_a_covered_element_is_refused_and_the_cover_is_named() {
     // A click dispatched at a point a banner covers is delivered to the banner,
     // and without this check the caller is told it succeeded.
-    let Some((browser, session)) = on(
-        "<button id='target' style='position:fixed;top:50px;left:50px'>Buy</button>\
+    let (browser, session) = on("<button id='target' style='position:fixed;top:50px;left:50px'>Buy</button>\
          <div id='banner' style='position:fixed;inset:0;background:#000'>Consent</div>",
-    )
-    .await
-    else {
-        return;
-    };
+    ).await;
 
     let error = browser
         .perform(
@@ -206,15 +220,10 @@ async fn live_a_covered_element_is_refused_and_the_cover_is_named() {
 async fn live_filling_replaces_the_value_and_fires_the_page_handlers() {
     // `Fill` clears and types through real key events, so a field that reacts to
     // input sees them. Assigning `value` directly would not.
-    let Some((browser, session)) = on(
-        "<input id='q' value='old'>\
+    let (browser, session) = on("<input id='q' value='old'>\
          <script>document.getElementById('q').addEventListener('input', () => { \
             document.title = document.getElementById('q').value; });</script>",
-    )
-    .await
-    else {
-        return;
-    };
+    ).await;
 
     browser
         .perform(
@@ -244,15 +253,10 @@ async fn live_filling_replaces_the_value_and_fires_the_page_handlers() {
 
 #[tokio::test]
 async fn live_pressing_a_key_reaches_the_page() {
-    let Some((browser, session)) = on(
-        "<input id='q'>\
+    let (browser, session) = on("<input id='q'>\
          <script>document.getElementById('q').addEventListener('keydown', (e) => { \
             document.title = e.key + ':' + e.keyCode; });</script>",
-    )
-    .await
-    else {
-        return;
-    };
+    ).await;
 
     browser
         .perform(
@@ -281,14 +285,9 @@ async fn live_pressing_a_key_reaches_the_page() {
 
 #[tokio::test]
 async fn live_a_locator_finds_an_element_by_what_it_says() {
-    let Some((browser, session)) = on(
-        "<button>Cancel</button><button>Submit order</button>\
+    let (browser, session) = on("<button>Cancel</button><button>Submit order</button>\
          <script>document.body.onclick = (e) => { document.title = e.target.innerText; };</script>",
-    )
-    .await
-    else {
-        return;
-    };
+    ).await;
 
     let outcome = browser
         .perform(
@@ -307,9 +306,7 @@ async fn live_a_locator_finds_an_element_by_what_it_says() {
 
 #[tokio::test]
 async fn live_a_missing_element_is_reported_rather_than_guessed_at() {
-    let Some((browser, session)) = on("<p>nothing here</p>").await else {
-        return;
-    };
+    let (browser, session) = on("<p>nothing here</p>").await;
 
     let error = browser
         .perform(
@@ -328,9 +325,7 @@ async fn live_a_missing_element_is_reported_rather_than_guessed_at() {
 
 #[tokio::test]
 async fn live_is_visible_answers_false_rather_than_failing() {
-    let Some((browser, session)) = on("<p id='shown'>here</p>").await else {
-        return;
-    };
+    let (browser, session) = on("<p id='shown'>here</p>").await;
 
     for (selector, expected) in [("#shown", true), ("#absent", false)] {
         let outcome = browser
@@ -350,14 +345,9 @@ async fn live_is_visible_answers_false_rather_than_failing() {
 
 #[tokio::test]
 async fn live_reading_a_page_produces_markdown_a_model_can_use() {
-    let Some((browser, session)) = on(
-        "<h1>Title</h1><p>Body text.</p><a href='https://example.com/x'>Link</a>\
+    let (browser, session) = on("<h1>Title</h1><p>Body text.</p><a href='https://example.com/x'>Link</a>\
          <script>console.log('not content')</script><style>p{color:red}</style>",
-    )
-    .await
-    else {
-        return;
-    };
+    ).await;
 
     let text = browser
         .read_page(&session.id, &ReadRequest::default())
@@ -381,9 +371,7 @@ async fn live_reading_a_page_produces_markdown_a_model_can_use() {
 
 #[tokio::test]
 async fn live_evaluating_returns_a_value_and_reports_a_throw() {
-    let Some((browser, session)) = on("<p>page</p>").await else {
-        return;
-    };
+    let (browser, session) = on("<p>page</p>").await;
 
     let value = browser
         .evaluate(
@@ -410,9 +398,7 @@ async fn live_evaluating_returns_a_value_and_reports_a_throw() {
 
 #[tokio::test]
 async fn live_a_screenshot_round_trips_through_the_output_handle() {
-    let Some((browser, session)) = on("<h1 style='font-size:64px'>Shot</h1>").await else {
-        return;
-    };
+    let (browser, session) = on("<h1 style='font-size:64px'>Shot</h1>").await;
 
     let handle = browser
         .screenshot(&session.id, &ScreenshotRequest::default())
@@ -450,16 +436,13 @@ async fn live_a_screenshot_round_trips_through_the_output_handle() {
 #[tokio::test]
 async fn live_an_origin_allowlist_refuses_what_it_does_not_admit() {
     let browser = Browser::new();
-    let options = SessionOptions {
-        allowed_origins: vec!["https://example.com".to_string()],
-        ..SessionOptions::default()
-    };
-
-    let session = match browser.open_session(options).await {
-        Ok(session) => session,
-        Err(Error::BrowserUnavailable { .. }) => return,
-        Err(error) => panic!("opening a session failed: {error}"),
-    };
+    let session = browser
+        .open_session(SessionOptions {
+            allowed_origins: vec!["https://example.com".to_string()],
+            ..options()
+        })
+        .await
+        .expect("a browser is available; see this file's docs");
 
     let error = browser
         .navigate(&session.id, &NavigateRequest::new("https://elsewhere.test/"))
@@ -472,9 +455,7 @@ async fn live_an_origin_allowlist_refuses_what_it_does_not_admit() {
 
 #[tokio::test]
 async fn live_sessions_are_listed_and_close_cleanly() {
-    let Some((browser, session)) = on("<h1>One</h1>").await else {
-        return;
-    };
+    let (browser, session) = on("<h1>One</h1>").await;
 
     let listed = browser.list_sessions().await;
     assert_eq!(listed.len(), 1);
