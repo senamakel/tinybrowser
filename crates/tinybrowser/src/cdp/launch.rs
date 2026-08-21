@@ -301,7 +301,7 @@ async fn read_websocket_url(stderr: tokio::process::ChildStderr) -> Result<Strin
 /// what to do. The remedy is deliberately *reported* rather than applied:
 /// `--no-sandbox` removes the renderer's isolation from the pages it visits,
 /// which is not a default this module gets to choose on a host's behalf.
-fn diagnose(banner: &[String]) -> String {
+pub(crate) fn diagnose(banner: &[String]) -> String {
     if banner.iter().any(|line| line.contains("No usable sandbox")) {
         return concat!(
             "browser could not start because this host has no usable sandbox: unprivileged ",
