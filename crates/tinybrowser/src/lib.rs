@@ -1,62 +1,122 @@
-//! A production-ready starting point for an installable `TinyBus` module.
+//! A Chrome DevTools Protocol browser engine for agents, packaged as an
+//! installable `TinyBus` module.
 //!
-//! This crate is a template. It ships the layout, lint configuration, error
-//! handling, testing, and documentation conventions described in `AGENTS.md`.
-//! The compiled `cdylib` exports `TinyBus` module ABI v1 and serves the example
-//! [`greet`] behavior over the bus.
+//! # What this is for
 //!
-//! # Layout
+//! An agent host that wants to look at a web page has bad options. Shelling out
+//! to a browser CLI means a subprocess, a JSON parser around its output, and a
+//! binary to install and version-match. Linking a browser stack into the host
+//! means dragging a WebSocket client, a TLS stack, an image codec and a protocol
+//! surface into a binary that mostly does something else — and a crash anywhere
+//! in it is a crash in the host.
 //!
-//! This is the implementation half of a two-crate workspace:
+//! This crate is the third option. It is a complete browser engine — launching,
+//! navigation, accessibility snapshots, real input events, extraction,
+//! screenshots — that ships as a `cdylib` a host loads over `TinyBus`. The
+//! host's build stays as it was; what it gains is a handful of bus members and
+//! [`tinybrowser_bus`], a dependency-light vocabulary crate, to spell them with.
 //!
-//! - [`template_bus`] — the wire contract. Member names, payload types, and the
-//!   contract version, with no transport and no behavior. A host that only
-//!   makes calls depends on that crate alone.
-//! - `template` — this crate. The behavior, the crate-wide error type, and the
-//!   `TinyBus` adapter that serves them, built as both an `rlib` and the
-//!   `cdylib` the loader consumes.
+//! # The loop it is shaped around
 //!
-//! Within this crate:
+//! ```text
+//! OpenSession  ->  Navigate  ->  Snapshot  ->  Perform  ->  Snapshot  ->  ...
+//!                                    |             |
+//!                                ReadPage      Screenshot
+//! ```
 //!
-//! - `src/error/` holds the crate-wide [`Error`] enum and the [`Result`] alias
-//!   returned by every fallible public function.
-//! - Each feature area lives in its own module directory with a `mod.rs`
-//!   module root, an optional `types.rs`, and a `test.rs` holding its unit
-//!   tests.
-//! - Every public item is re-exported from here — including all of
-//!   [`template_bus`] — so downstream users have a single predictable surface
-//!   and `template::GreetRequest` is the *same type* as
-//!   `template_bus::GreetRequest`, not a structural twin.
-//! - `tinybus_module` adapts the public behavior to `TinyBus` and exports the
-//!   module descriptor, embedded manifest, and initialization entrypoint.
+//! [`Snapshot`] is the important one. It renders the page's accessibility tree
+//! as indented text with a `@e12` ref on everything actionable, which is an
+//! order of magnitude smaller than the DOM and already excludes what a screen
+//! reader would not announce. An agent reads that, picks a ref, and passes it
+//! straight back as a [`Target`] — so the thing it acts on is the thing it saw.
+//!
+//! # Entry points
+//!
+//! - [`Browser`] — the engine. One method per bus member; usable directly from
+//!   Rust with no bus involved.
+//! - [`Error`] — every failure, each mapping to one published wire name.
+//! - Everything from [`tinybrowser_bus`], re-exported: [`Action`],
+//!   [`SessionOptions`], [`Snapshot`], [`Target`], and the rest.
 //!
 //! # Example
 //!
-//! ```
-//! use template::{greet, Error, GreetRequest};
+//! ```no_run
+//! use tinybrowser::{Action, Browser, NavigateRequest, SnapshotRequest, Target};
 //!
-//! assert_eq!(greet("Ferris")?, "Hello, Ferris!");
-//! assert_eq!(greet("   ").unwrap_err(), Error::EmptyName);
-//! assert_eq!(GreetRequest::new("Ferris").name, "Ferris");
-//! # Ok::<(), template::Error>(())
+//! # async fn example() -> tinybrowser::Result<()> {
+//! let browser = Browser::new();
+//! let session = browser.open_session(Default::default()).await?;
+//!
+//! browser
+//!     .navigate(&session.id, &NavigateRequest::new("https://example.com"))
+//!     .await?;
+//!
+//! let snapshot = browser.snapshot(&session.id, &SnapshotRequest::interactive()).await?;
+//! println!("{}", snapshot.tree);
+//!
+//! if let Some(link) = snapshot.refs.iter().find(|element| element.role == "link") {
+//!     browser
+//!         .perform(
+//!             &session.id,
+//!             &Action::Click { target: Target::reference(&link.id), new_tab: false },
+//!         )
+//!         .await?;
+//! }
+//!
+//! browser.close_session(&session.id).await?;
+//! # Ok(())
+//! # }
 //! ```
 //!
-//! Replace the `greeting` module with the first real feature area, keep the
-//! conventions, and update this documentation to describe the new crate.
+//! # What is deliberately not here
+//!
+//! **No agent, no model, no tool schemas.** This crate drives a browser and
+//! describes what it sees. Deciding what to click is the host's job, and a
+//! module that shipped its own prompt would be one more thing to keep in step
+//! with a model it cannot see.
+//!
+//! **No sandbox.** The origin allowlist in [`SessionOptions`] is a guard rail
+//! against an agent wandering off, not a boundary — a page's own JavaScript can
+//! navigate around it. A host that needs a real boundary puts the browser in a
+//! network namespace. Saying so plainly is more useful than implying otherwise.
+//!
+//! **No persistence.** Sessions are held in memory and end with the process.
+//! Cookies and logins live in the profile directory for the life of a session
+//! and are removed with it, unless the host named its own.
+//!
+//! # Credit
+//!
+//! The design owes a great deal to Vercel's `agent-browser`
+//! (<https://github.com/vercel-labs/agent-browser>, Apache-2.0): the
+//! accessibility tree as the thing an agent reads, `@ref` addressing scoped to a
+//! snapshot, and hit-testing a click point before dispatching at it are all
+//! taken from it. See `THIRD-PARTY.md` at the repository root.
 
-mod error;
-mod greeting;
-mod tinybus_module;
+mod capture;
+mod cdp;
+mod engine;
+pub mod error;
+mod extract;
+mod interact;
+mod session;
+mod snapshot;
 
+pub mod tinybus_module;
+
+pub use engine::Browser;
 pub use error::{Error, Result};
 
+/// The wire contract, re-exported whole.
+///
+/// `tinybrowser::Action` and `tinybrowser_bus::Action` are the *same type*, not
+/// structural twins: this crate depends on the contract rather than restating
+/// it, so a host and a module cannot drift.
+pub use tinybrowser_bus;
 
-// The wire contract, re-exported by module rather than by item so every path
-// through this crate resolves to the same definitions the contract crate
-// publishes. A host may depend on `template-bus` directly and get exactly these
-// types; nothing here redefines them.
-pub use template_bus;
-pub use template_bus::{
-    CONTRACT_VERSION, GreetRequest, GreetResponse, INTERFACE, METHODS, OBJECT_PATH, is_compatible,
-    names, version,
+pub use tinybrowser_bus::{
+    Action, ActionOutcome, CONTRACT_VERSION, ElementRef, EvaluateRequest, INTERFACE, ImageFormat,
+    LocateBy, Locator, METHODS, NavigateRequest, OBJECT_PATH, OutputChunk, OutputId, OutputRef,
+    PageState, PageText, ReadFormat, ReadRequest, ScreenshotRequest, ScrollDirection, SessionId,
+    SessionInfo, SessionOptions, Snapshot, SnapshotRequest, Target, Viewport, WaitState, WaitUntil,
+    errors, is_compatible, names,
 };
