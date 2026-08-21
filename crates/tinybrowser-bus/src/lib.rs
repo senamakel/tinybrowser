@@ -55,6 +55,21 @@
 //! So: a module author depends on `tinybrowser` and gets behavior and
 //! vocabulary. A host depends on `tinybrowser-bus` and gets vocabulary alone.
 //!
+//! # Why nothing here is `#[non_exhaustive]`
+//!
+//! Both sides construct these types: a host builds the requests, and the module
+//! builds the replies, and the module is a *different crate* from this one.
+//! Marking them non-exhaustive would leave the implementation unable to build
+//! its own replies, and would turn `..Default::default()` — the idiom the
+//! request types are designed around — into a compile error for every caller.
+//!
+//! The evolution mechanism is [`CONTRACT_VERSION`] and the [`is_compatible`]
+//! bind rule instead, which is the one that works across a dynamically loaded
+//! boundary. A field added to a request is additive because every request type
+//! carries `#[serde(default)]`; a field added to a reply is additive because a
+//! host deserializing it ignores what it does not know. Neither is something the
+//! Rust attribute could have enforced across a `cdylib` anyway.
+//!
 //! # Staying in step with the module
 //!
 //! [`names::METHODS`] lists every member. `crates/tinybrowser` asserts its

@@ -99,7 +99,6 @@ pub enum LocateBy {
 /// An element named by what it is rather than where it is.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
-#[non_exhaustive]
 pub struct Locator {
     /// The dimension to search on.
     pub by: LocateBy,
@@ -199,7 +198,6 @@ impl Default for WaitState {
 /// translation layer with its own bugs.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
-#[non_exhaustive]
 pub enum Action {
     /// Click an element, scrolling it into view first.
     ///
@@ -332,7 +330,6 @@ pub enum Action {
 /// their answer in [`ActionOutcome::value`]; the acting ones leave it null and
 /// are described entirely by the page state they left behind.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[non_exhaustive]
 pub struct ActionOutcome {
     /// The value a reading action produced: a string for
     /// [`Action::GetText`], a boolean for [`Action::IsVisible`], null for an

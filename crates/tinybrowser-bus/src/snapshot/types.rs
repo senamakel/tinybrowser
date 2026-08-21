@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 /// What to include in a snapshot.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
-#[non_exhaustive]
 pub struct SnapshotRequest {
     /// Snapshot only the subtree under the first element matching this CSS
     /// selector.
@@ -58,7 +57,6 @@ impl SnapshotRequest {
 
 /// One addressable element in a snapshot.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[non_exhaustive]
 pub struct ElementRef {
     /// The ref, without its `@`. Pass it to [`crate::Target::reference`].
     pub id: String,
@@ -70,7 +68,6 @@ pub struct ElementRef {
 
 /// The rendered accessibility tree of a page.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[non_exhaustive]
 pub struct Snapshot {
     /// The URL the snapshot was taken at.
     pub url: String,

@@ -37,7 +37,6 @@ impl Default for WaitUntil {
 /// Where to send the session's active page.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
-#[non_exhaustive]
 pub struct NavigateRequest {
     /// The destination. A bare host such as `example.com` is read as `https://`,
     /// matching what an operator would type; anything else must carry its
@@ -83,7 +82,6 @@ impl NavigateRequest {
 /// Returned by every member that can move the page, so a host never has to make
 /// a second call to find out where an action left it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[non_exhaustive]
 pub struct PageState {
     /// The URL after any redirect.
     pub url: String,
@@ -134,7 +132,6 @@ impl Default for ReadFormat {
 /// A request to read the active page.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
-#[non_exhaustive]
 pub struct ReadRequest {
     /// The shape to extract into.
     pub format: ReadFormat,
@@ -158,7 +155,6 @@ impl Default for ReadRequest {
 
 /// The extracted page.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[non_exhaustive]
 pub struct PageText {
     /// The URL the content came from.
     pub url: String,
@@ -177,7 +173,6 @@ pub struct PageText {
 /// JavaScript to run in the active page.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
-#[non_exhaustive]
 pub struct EvaluateRequest {
     /// The expression to evaluate. Its completion value is what comes back.
     pub expression: String,

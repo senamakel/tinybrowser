@@ -93,7 +93,6 @@ impl ImageFormat {
 /// What to capture.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
-#[non_exhaustive]
 pub struct ScreenshotRequest {
     /// Capture just this element. Defaults to the viewport.
     pub target: Option<Target>,
@@ -119,7 +118,6 @@ impl Default for ScreenshotRequest {
 
 /// A handle to an image the module is holding.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[non_exhaustive]
 pub struct OutputRef {
     /// The identity to read and release it by.
     pub id: OutputId,
@@ -142,7 +140,6 @@ pub struct OutputRef {
 
 /// One piece of a held output.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[non_exhaustive]
 pub struct OutputChunk {
     /// The output this came from.
     pub id: OutputId,

@@ -60,7 +60,6 @@ impl From<&str> for SessionId {
 /// responsive site serve its mobile tree, and an agent then cannot find the
 /// navigation an operator sees.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[non_exhaustive]
 pub struct Viewport {
     /// Width in CSS pixels.
     pub width: u32,
@@ -109,7 +108,6 @@ impl Default for Viewport {
 /// spells the parts it actually cares about.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
-#[non_exhaustive]
 pub struct SessionOptions {
     /// Attach to an already-running browser at this DevTools endpoint —
     /// `http://127.0.0.1:9222`, or a `ws://`/`wss://` browser socket — instead
@@ -164,7 +162,6 @@ impl Default for SessionOptions {
 
 /// What the module is holding for one session.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[non_exhaustive]
 pub struct SessionInfo {
     /// The identity every other member takes.
     pub id: SessionId,
