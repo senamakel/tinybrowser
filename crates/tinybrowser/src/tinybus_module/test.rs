@@ -170,3 +170,195 @@ async fn reading_an_unknown_output_reports_it() -> tinybus::Result<()> {
     assert!(error.to_string().contains("no such output"), "{error}");
     Ok(())
 }
+
+/// Whether this run opted into driving a real browser.
+///
+/// The same switch `tests/live_chrome.rs` reads, for the same reason: the
+/// members below cannot be exercised without a browser, and a machine without
+/// one must still pass `cargo test --all-features`.
+fn live() -> bool {
+    std::env::var("TINYBROWSER_LIVE_TESTS").is_ok_and(|value| !value.is_empty() && value != "0")
+}
+
+/// The session options the live tests here open with.
+fn options() -> tinybrowser_bus::SessionOptions {
+    tinybrowser_bus::SessionOptions {
+        args: std::env::var("TINYBROWSER_TEST_ARGS")
+            .unwrap_or_default()
+            .split_whitespace()
+            .map(str::to_string)
+            .collect(),
+        ..tinybrowser_bus::SessionOptions::default()
+    }
+}
+
+/// Serves one page on loopback and returns its URL.
+async fn serve(body: &'static str) -> String {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("binds a loopback port");
+    let address = listener.local_addr().expect("has an address");
+
+    tokio::spawn(async move {
+        let Ok((mut stream, _)) = listener.accept().await else {
+            return;
+        };
+        use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+
+        let mut scratch = [0_u8; 2048];
+        let _ = stream.read(&mut scratch).await;
+        let document = format!(
+            "<!doctype html><html><head><title>bus</title></head><body>{body}</body></html>"
+        );
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\
+             Content-Length: {}\r\nConnection: close\r\n\r\n{document}",
+            document.len()
+        );
+        let _ = stream.write_all(response.as_bytes()).await;
+        let _ = stream.shutdown().await;
+    });
+
+    format!("http://{address}/")
+}
+
+#[tokio::test]
+async fn live_every_member_answers_over_a_real_bus() -> tinybus::Result<()> {
+    if !live() {
+        return Ok(());
+    }
+
+    // One test rather than a dozen because the expensive part is the browser,
+    // and because what is being checked is the *surface*: every member
+    // serializes its arguments, reaches the engine, and returns a payload the
+    // client can decode. The behaviour behind each one is covered by
+    // `tests/live_chrome.rs`.
+    let (proxy, _module) = connected().await?;
+
+    let session: tinybrowser_bus::SessionInfo = proxy
+        .call(names::methods::OPEN_SESSION, (options(),))
+        .await?;
+    assert!(session.launched);
+
+    let listed: Vec<tinybrowser_bus::SessionInfo> =
+        proxy.call(names::methods::LIST_SESSIONS, ()).await?;
+    assert_eq!(listed.len(), 1);
+
+    let page: tinybrowser_bus::PageState = proxy
+        .call(
+            names::methods::NAVIGATE,
+            (
+                &session.id,
+                tinybrowser_bus::NavigateRequest::new(
+                    serve("<h1>Bus</h1><button id='b'>Press</button>").await,
+                ),
+            ),
+        )
+        .await?;
+    assert_eq!(page.title, "bus");
+    assert_eq!(page.status, Some(200));
+
+    let snapshot: tinybrowser_bus::Snapshot = proxy
+        .call(
+            names::methods::SNAPSHOT,
+            (&session.id, tinybrowser_bus::SnapshotRequest::interactive()),
+        )
+        .await?;
+    let reference = snapshot.refs.first().expect("a button in the snapshot");
+    assert_eq!(reference.role, "button");
+
+    let outcome: tinybrowser_bus::ActionOutcome = proxy
+        .call(
+            names::methods::PERFORM,
+            (
+                &session.id,
+                tinybrowser_bus::Action::GetText {
+                    target: tinybrowser_bus::Target::reference(&reference.id),
+                },
+            ),
+        )
+        .await?;
+    assert_eq!(outcome.value, serde_json::json!("Press"));
+
+    let text: tinybrowser_bus::PageText = proxy
+        .call(
+            names::methods::READ_PAGE,
+            (&session.id, tinybrowser_bus::ReadRequest::default()),
+        )
+        .await?;
+    assert!(text.content.contains("Bus"), "{}", text.content);
+
+    let value: serde_json::Value = proxy
+        .call(
+            names::methods::EVALUATE,
+            (
+                &session.id,
+                tinybrowser_bus::EvaluateRequest::new("document.title"),
+            ),
+        )
+        .await?;
+    assert_eq!(value, serde_json::json!("bus"));
+
+    let handle: tinybrowser_bus::OutputRef = proxy
+        .call(
+            names::methods::SCREENSHOT,
+            (&session.id, tinybrowser_bus::ScreenshotRequest::default()),
+        )
+        .await?;
+    assert_eq!(handle.media_type, "image/png");
+
+    let chunk: tinybrowser_bus::OutputChunk = proxy
+        .call(
+            names::methods::READ_OUTPUT,
+            (&handle.id, 0_u64, 64_u64 * 1024),
+        )
+        .await?;
+    assert!(!chunk.data.is_empty());
+
+    proxy
+        .call::<()>(names::methods::RELEASE_OUTPUT, (&handle.id,))
+        .await?;
+    proxy
+        .call::<()>(names::methods::CLOSE_SESSION, (&session.id,))
+        .await?;
+
+    let after: Vec<tinybrowser_bus::SessionInfo> =
+        proxy.call(names::methods::LIST_SESSIONS, ()).await?;
+    assert!(after.is_empty());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn live_an_engine_failure_keeps_its_error_name_across_the_wire() -> tinybus::Result<()> {
+    if !live() {
+        return Ok(());
+    }
+
+    // The mapping matters most for a failure that came from deep inside the
+    // engine rather than from the adapter's own argument checks.
+    let (proxy, _module) = connected().await?;
+    let session: tinybrowser_bus::SessionInfo = proxy
+        .call(names::methods::OPEN_SESSION, (options(),))
+        .await?;
+
+    let result = proxy
+        .call::<tinybrowser_bus::PageState>(
+            names::methods::NAVIGATE,
+            (
+                &session.id,
+                tinybrowser_bus::NavigateRequest::new("file:///etc/passwd"),
+            ),
+        )
+        .await;
+
+    let Err(error) = result else {
+        panic!("navigating to a file url unexpectedly succeeded");
+    };
+    assert!(error.to_string().contains(errors::INVALID_INPUT), "{error}");
+
+    proxy
+        .call::<()>(names::methods::CLOSE_SESSION, (&session.id,))
+        .await?;
+    Ok(())
+}
