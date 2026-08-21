@@ -172,3 +172,81 @@ fn a_first_match_locator_does_not_mention_its_index() {
     assert!(!described.contains("index"));
     assert!(described.contains("Sign in"));
 }
+
+#[test]
+fn every_punctuation_key_on_the_us_layout_gets_its_physical_key() {
+    // A page reading `code` for a shortcut — a great many do — sees the wrong
+    // key otherwise, and the failure is silent.
+    for (character, code) in [
+        (" ", "Space"),
+        ("-", "Minus"),
+        ("=", "Equal"),
+        (".", "Period"),
+        (",", "Comma"),
+        (";", "Semicolon"),
+        ("'", "Quote"),
+        ("[", "BracketLeft"),
+        ("]", "BracketRight"),
+        ("\\", "Backslash"),
+        ("`", "Backquote"),
+    ] {
+        assert_eq!(parse(character).expect("parses").code, code, "{character}");
+    }
+}
+
+#[test]
+fn a_space_carries_the_virtual_code_a_page_expects() {
+    let stroke = parse(" ").expect("parses");
+
+    assert_eq!(stroke.key_code, 32);
+    assert_eq!(stroke.text.as_deref(), Some(" "));
+}
+
+#[test]
+fn punctuation_reports_no_virtual_code_rather_than_a_wrong_one() {
+    // There is no correct legacy code for these without knowing the layout, and
+    // a plausible-looking wrong one is worse than an unidentified key.
+    assert_eq!(parse("-").expect("parses").key_code, 0);
+}
+
+#[test]
+fn the_named_space_and_the_character_agree() {
+    assert_eq!(parse("space").expect("parses"), parse(" ").expect("parses"));
+}
+
+#[test]
+fn every_named_key_is_reachable_by_its_name() {
+    for name in [
+        "enter",
+        "tab",
+        "escape",
+        "esc",
+        "backspace",
+        "delete",
+        "space",
+        "arrowup",
+        "arrowdown",
+        "arrowleft",
+        "arrowright",
+        "up",
+        "down",
+        "left",
+        "right",
+        "home",
+        "end",
+        "pageup",
+        "pagedown",
+    ] {
+        let stroke = parse(name).unwrap_or_else(|error| panic!("{name}: {error}"));
+        assert!(!stroke.key.is_empty(), "{name} parsed to an empty key");
+    }
+}
+
+#[test]
+fn a_key_without_inserted_text_stays_that_way() {
+    // Escape and the arrows type nothing; giving them `text` would insert a
+    // character every time an agent moved the cursor.
+    for name in ["Escape", "ArrowDown", "Backspace", "Delete", "Home"] {
+        assert!(parse(name).expect("parses").text.is_none(), "{name}");
+    }
+}
