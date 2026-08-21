@@ -1702,7 +1702,7 @@ async fn live_pressing_enter_in_a_form_settles_its_submission() {
 
     assert!(
         outcome.page.url.starts_with(&destination),
-        "{}",
+        "expected the submission to land on {destination}, but the page is at {}",
         outcome.page.url
     );
 
