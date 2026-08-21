@@ -20,15 +20,20 @@ use tinybus::{Connection, Interface};
 use super::{BrowserService, setup};
 
 /// A broker, the module, and a client proxy pointed at it.
-async fn connected() -> tinybus::Result<tinybus::Proxy> {
+///
+/// The module's own connection comes back with the proxy and has to be held:
+/// dropping it releases the well-known name, and every call then fails with
+/// `NameHasNoOwner` rather than reaching the service that was just set up.
+async fn connected() -> tinybus::Result<(tinybus::Proxy, Connection)> {
     let bus = MemoryBus::new();
     Broker::new().spawn(bus.clone());
 
     let service = Connection::connect(bus.connect().await?).await?;
-    setup(service).await?;
+    setup(service.clone()).await?;
 
     let client = Connection::connect(bus.connect().await?).await?;
-    client.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)
+    let proxy = client.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
+    Ok((proxy, service))
 }
 
 #[test]
@@ -52,7 +57,7 @@ fn the_served_interface_name_matches_the_contract() {
 
 #[tokio::test]
 async fn the_module_reports_the_contract_version_it_was_built_against() -> tinybus::Result<()> {
-    let proxy = connected().await?;
+    let (proxy, _module) = connected().await?;
     let version: (u32, u32) = proxy.call(names::methods::CONTRACT_VERSION, ()).await?;
 
     assert_eq!(version, tinybrowser_bus::CONTRACT_VERSION);
@@ -62,7 +67,7 @@ async fn the_module_reports_the_contract_version_it_was_built_against() -> tinyb
 
 #[tokio::test]
 async fn a_fresh_module_lists_no_sessions() -> tinybus::Result<()> {
-    let proxy = connected().await?;
+    let (proxy, _module) = connected().await?;
     let sessions: Vec<tinybrowser_bus::SessionInfo> =
         proxy.call(names::methods::LIST_SESSIONS, ()).await?;
 
@@ -74,7 +79,7 @@ async fn a_fresh_module_lists_no_sessions() -> tinybus::Result<()> {
 async fn closing_an_unknown_session_succeeds_over_the_bus() -> tinybus::Result<()> {
     // Idempotent teardown is a property of the wire surface, not only of the
     // engine: a host retrying a close after a timeout must not get an error.
-    let proxy = connected().await?;
+    let (proxy, _module) = connected().await?;
     proxy
         .call::<()>(
             names::methods::CLOSE_SESSION,
@@ -90,7 +95,7 @@ async fn a_failure_arrives_carrying_its_wire_error_name() -> tinybus::Result<()>
     // The name is the whole point of the mapping: a host decides what to show a
     // model by matching on it, and a failure that arrives as generic prose sends
     // it down the wrong recovery path.
-    let proxy = connected().await?;
+    let (proxy, _module) = connected().await?;
     let result = proxy
         .call::<tinybrowser_bus::PageState>(
             names::methods::NAVIGATE,
@@ -114,7 +119,7 @@ async fn a_failure_arrives_carrying_its_wire_error_name() -> tinybus::Result<()>
 
 #[tokio::test]
 async fn an_empty_expression_is_refused_over_the_bus() -> tinybus::Result<()> {
-    let proxy = connected().await?;
+    let (proxy, _module) = connected().await?;
     let result = proxy
         .call::<serde_json::Value>(
             names::methods::EVALUATE,
@@ -134,7 +139,7 @@ async fn an_empty_expression_is_refused_over_the_bus() -> tinybus::Result<()> {
 
 #[tokio::test]
 async fn releasing_an_unknown_output_succeeds_over_the_bus() -> tinybus::Result<()> {
-    let proxy = connected().await?;
+    let (proxy, _module) = connected().await?;
     proxy
         .call::<()>(
             names::methods::RELEASE_OUTPUT,
@@ -147,7 +152,7 @@ async fn releasing_an_unknown_output_succeeds_over_the_bus() -> tinybus::Result<
 
 #[tokio::test]
 async fn reading_an_unknown_output_reports_it() -> tinybus::Result<()> {
-    let proxy = connected().await?;
+    let (proxy, _module) = connected().await?;
     let result = proxy
         .call::<tinybrowser_bus::OutputChunk>(
             names::methods::READ_OUTPUT,
