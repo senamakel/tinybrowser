@@ -4,15 +4,15 @@
 //!
 //! ```text
 //! cargo run --example verify_github_release -- \
-//!   https://github.com/tinyhumansai/template/releases/tag/v0.1.4 \
-//!   template-0.1.4-ubuntu-24.04-x86_64.tar.gz \
+//!   https://github.com/tinyhumansai/tinybrowser/releases/tag/v0.1.0 \
+//!   tinybrowser-0.1.0-ubuntu-24.04-x86_64.tar.gz \
 //!   <sha256>
 //! ```
 
 use std::io;
 use std::time::Duration;
 
-use template::{GreetRequest, GreetResponse, names};
+use tinybrowser::{is_compatible, names};
 use tinybus::Connection;
 use tinybus::broker::Broker;
 use tinybus::module::ModuleHost;
@@ -53,14 +53,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     })
     .await??;
 
+    // `ContractVersion` rather than a browser operation on purpose: this
+    // verifies that the artifact loads, claims its name, and answers a call.
+    // Launching a browser would make the check depend on what the machine
+    // running it happens to have installed, which is a different question.
     let proxy = client.proxy(names::INTERFACE, names::OBJECT_PATH, names::INTERFACE)?;
-    let reply: GreetResponse = proxy
-        .call(names::methods::GREET, (GreetRequest::new("TinyBus"),))
-        .await?;
-    if reply.greeting != "Hello, TinyBus!" {
+    let version: (u32, u32) = proxy.call(names::methods::CONTRACT_VERSION, ()).await?;
+    if !is_compatible(version) {
         return Err(io::Error::other(format!(
-            "module returned an unexpected greeting: {}",
-            reply.greeting
+            "module serves contract {version:?}, which this build cannot bind to"
         ))
         .into());
     }

@@ -4,19 +4,63 @@
 //! Run it with:
 //!
 //! ```sh
-//! cargo run --example basic
+//! cargo run -p tinybrowser --example basic
 //! ```
+//!
+//! It drives a real browser when this host has one. When it does not — a CI
+//! runner, a minimal container — it prints the same error a caller would get and
+//! exits successfully, because "no browser here" is a fact about the machine
+//! rather than a failure of the example.
 
-use template::{Result, greet};
+use tinybrowser::{
+    Action, Browser, Error, NavigateRequest, ReadRequest, SnapshotRequest, Target,
+};
 
-fn main() -> Result<()> {
-    println!("{}", greet("Rust")?);
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let browser = Browser::new();
 
-    // Failure modes are part of the public contract; show them too.
-    match greet("   ") {
-        Ok(greeting) => println!("{greeting}"),
-        Err(error) => println!("expected failure: {error}"),
+    let session = match browser.open_session(Default::default()).await {
+        Ok(session) => session,
+        Err(error @ Error::BrowserUnavailable { .. }) => {
+            println!("no browser on this host, so there is nothing to drive: {error}");
+            return Ok(());
+        }
+        Err(error) => return Err(error.into()),
+    };
+    println!("opened {} at {}", session.id, session.endpoint);
+
+    let page = browser
+        .navigate(&session.id, &NavigateRequest::new("https://example.com"))
+        .await?;
+    println!("{} — {:?}", page.url, page.title);
+
+    // What an agent reads: the accessibility tree, with a ref on everything it
+    // could act on.
+    let snapshot = browser
+        .snapshot(&session.id, &SnapshotRequest::default())
+        .await?;
+    println!("\n{}\n", snapshot.tree);
+
+    // And what it does with one of those refs.
+    if let Some(link) = snapshot.refs.iter().find(|element| element.role == "link") {
+        let outcome = browser
+            .perform(
+                &session.id,
+                &Action::Click {
+                    target: Target::reference(&link.id),
+                    new_tab: false,
+                },
+            )
+            .await?;
+        println!("clicked {:?}, now at {}", link.name, outcome.page.url);
     }
 
+    let text = browser
+        .read_page(&session.id, &ReadRequest::default())
+        .await?;
+    println!("\n{}", text.content.chars().take(400).collect::<String>());
+
+    browser.close_session(&session.id).await?;
     Ok(())
 }
