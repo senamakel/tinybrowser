@@ -225,7 +225,7 @@ pub(crate) async fn launch(
 /// Split out for the tests: the failure worth checking is a browser that starts
 /// and then never says anything, and waiting the real twenty seconds to check it
 /// would put a twenty-second pause in the suite.
-async fn launch_within(
+pub(crate) async fn launch_within(
     executable: &std::path::Path,
     headless: bool,
     profile: Option<&str>,
