@@ -557,16 +557,28 @@ async fn a_headed_launch_into_a_named_profile_still_reports_its_failure() {
 }
 
 #[tokio::test]
+#[cfg(unix)]
 async fn a_browser_that_starts_and_says_nothing_times_out() {
-    // The other startup failure: the process is alive and simply never reports
-    // a debugger url. Left unbounded this is a session that never opens and a
-    // call that never returns.
-    let Ok(shell) = which_shell() else { return };
+    // The other startup failure: the process is alive and simply never reports a
+    // debugger url. Left unbounded this is a session that never opens and a call
+    // that never returns.
+    //
+    // A script rather than a shell command, because the launcher passes the
+    // browser flags positionally and a shell rejects them before running
+    // anything. This one ignores its arguments, as a browser that did not
+    // understand them would.
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let script = std::env::temp_dir().join(format!("tinybrowser-mute-{}", std::process::id()));
+    std::fs::write(&script, "#!/bin/sh\nsleep 30\n").expect("writes the script");
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755))
+        .expect("makes it executable");
+
     let error = launch_within(
-        &shell,
+        &script,
         true,
         None,
-        &["-c".to_string(), "sleep 30".to_string()],
+        &[],
         std::time::Duration::from_millis(200),
     )
     .await
@@ -577,6 +589,7 @@ async fn a_browser_that_starts_and_says_nothing_times_out() {
         error.to_string().contains("did not report a devtools url"),
         "{error}"
     );
+    let _ = std::fs::remove_file(&script);
 }
 
 #[test]
