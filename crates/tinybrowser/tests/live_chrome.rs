@@ -1554,7 +1554,8 @@ async fn live_a_session_can_be_told_what_size_to_render_at() {
         .expect("evaluates");
 
     assert_eq!(size[0], serde_json::json!(390));
-    assert_eq!(size[1], serde_json::json!(2.0));
+    // JSON does not distinguish 2 from 2.0, so compare as a number.
+    assert_eq!(size[1].as_f64(), Some(2.0));
     assert_eq!(size[2], serde_json::json!("tinybrowser-test/1.0"));
 
     browser.close_session(&session.id).await.expect("closes");
