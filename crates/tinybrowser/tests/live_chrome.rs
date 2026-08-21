@@ -1314,3 +1314,275 @@ async fn live_a_session_can_attach_to_a_browser_it_did_not_launch() {
 
     host.shutdown().await;
 }
+
+#[tokio::test]
+async fn live_an_invalid_selector_is_the_callers_mistake_not_the_pages() {
+    if !enabled() {
+        return;
+    }
+    // The page throws a `SyntaxError`, which as a page error would read as the
+    // site's fault. It is not: the caller wrote a selector that is not CSS.
+    let (browser, session) = on("<p>page</p>").await;
+
+    let error = browser
+        .perform(
+            &session.id,
+            &Action::Click {
+                target: Target::selector("<<not a selector>>"),
+                new_tab: false,
+            },
+        )
+        .await
+        .expect_err("refused");
+
+    assert!(matches!(error, Error::InvalidInput { .. }), "{error}");
+    browser.close_session(&session.id).await.expect("closes");
+}
+
+#[tokio::test]
+async fn live_a_locator_that_matches_nothing_names_what_it_looked_for() {
+    if !enabled() {
+        return;
+    }
+    let (browser, session) = on("<button>Cancel</button>").await;
+
+    let error = browser
+        .perform(
+            &session.id,
+            &Action::Click {
+                target: Target::locator(Locator::new(LocateBy::Text, "Definitely Not Here")),
+                new_tab: false,
+            },
+        )
+        .await
+        .expect_err("refused");
+
+    assert!(matches!(error, Error::NoSuchElement { .. }), "{error}");
+    assert!(error.to_string().contains("Definitely Not Here"), "{error}");
+
+    // An empty locator is refused before the page is asked anything.
+    let empty = browser
+        .perform(
+            &session.id,
+            &Action::Click {
+                target: Target::locator(Locator::new(LocateBy::Text, "   ")),
+                new_tab: false,
+            },
+        )
+        .await
+        .expect_err("refused");
+    assert!(matches!(empty, Error::InvalidInput { .. }), "{empty}");
+
+    browser.close_session(&session.id).await.expect("closes");
+}
+
+#[tokio::test]
+async fn live_every_locator_dimension_finds_its_element() {
+    if !enabled() {
+        return;
+    }
+    // Each dimension crosses into JavaScript as a string. A rename on one side
+    // alone produces "unknown locator dimension" at runtime and nothing at
+    // compile time, so every one is exercised here at least once.
+    let (browser, session) = on(
+        "<input id='labelled' aria-label='Email address'>\
+         <input id='placeheld' placeholder='Search products'>\
+         <button data-testid='cart'>Cart</button>\
+         <img src='data:image/gif;base64,R0lGODlhAQABAAAAACw=' alt='Company logo' width='20' height='20'>\
+         <span title='Tooltip text'>hover me</span>",
+    )
+    .await;
+
+    for (by, value) in [
+        (LocateBy::Label, "Email address"),
+        (LocateBy::Placeholder, "Search products"),
+        (LocateBy::TestId, "cart"),
+        (LocateBy::AltText, "Company logo"),
+        (LocateBy::Title, "Tooltip text"),
+    ] {
+        let outcome = browser
+            .perform(
+                &session.id,
+                &Action::IsVisible {
+                    target: Target::locator(Locator::new(by, value)),
+                },
+            )
+            .await
+            .unwrap_or_else(|error| panic!("{by:?} {value:?}: {error}"));
+
+        assert_eq!(outcome.value, serde_json::json!(true), "{by:?} {value:?}");
+    }
+
+    // And an exact match narrows where a substring would not.
+    let exact = browser
+        .perform(
+            &session.id,
+            &Action::IsVisible {
+                target: Target::locator(Locator {
+                    exact: true,
+                    ..Locator::new(LocateBy::Placeholder, "Search")
+                }),
+            },
+        )
+        .await
+        .expect("answers");
+    assert_eq!(exact.value, serde_json::json!(false));
+
+    browser.close_session(&session.id).await.expect("closes");
+}
+
+#[tokio::test]
+async fn live_snapshotting_a_node_the_tree_does_not_contain_is_reported() {
+    if !enabled() {
+        return;
+    }
+    // `<style>` resolves as an element and is not in the accessibility tree,
+    // which is exactly the case where a scoped snapshot has nothing to render.
+    let (browser, session) = on("<style>p{color:red}</style><p>text</p>").await;
+
+    let error = browser
+        .snapshot(
+            &session.id,
+            &SnapshotRequest {
+                selector: Some("style".to_string()),
+                ..SnapshotRequest::default()
+            },
+        )
+        .await
+        .expect_err("refused");
+
+    assert!(matches!(error, Error::NoSuchElement { .. }), "{error}");
+    browser.close_session(&session.id).await.expect("closes");
+}
+
+#[tokio::test]
+async fn live_a_click_in_a_new_tab_leaves_the_session_where_it_was() {
+    if !enabled() {
+        return;
+    }
+    // A documented limitation rather than a feature: the modifier reaches the
+    // page and the browser opens a tab, but the session keeps driving the one
+    // it has. Adopting the new tab is on the roadmap; silently appearing to
+    // follow it would be worse than this.
+    let (browser, session) = on("<a href='https://example.com/'>Away</a>").await;
+    let before = browser.list_sessions().await[0].url.clone();
+
+    let outcome = browser
+        .perform(
+            &session.id,
+            &Action::Click {
+                target: Target::selector("a"),
+                new_tab: true,
+            },
+        )
+        .await
+        .expect("clicks");
+
+    assert_eq!(outcome.page.url, before);
+    browser.close_session(&session.id).await.expect("closes");
+}
+
+#[tokio::test]
+async fn live_navigating_somewhere_unreachable_is_a_page_error() {
+    if !enabled() {
+        return;
+    }
+    let (browser, session) = on("<p>page</p>").await;
+
+    // A hostname that cannot resolve, by construction: `.invalid` is reserved
+    // for exactly this and never resolves anywhere.
+    let error = browser
+        .navigate(
+            &session.id,
+            &NavigateRequest {
+                url: "https://nothing.invalid/".to_string(),
+                wait_until: WaitUntil::Load,
+                timeout_ms: Some(10_000),
+            },
+        )
+        .await
+        .expect_err("refused");
+
+    assert!(
+        matches!(error, Error::PageError { .. } | Error::Timeout { .. }),
+        "{error}"
+    );
+    browser.close_session(&session.id).await.expect("closes");
+}
+
+#[tokio::test]
+async fn live_a_session_can_be_told_what_size_to_render_at() {
+    if !enabled() {
+        return;
+    }
+    // Layout decides what a snapshot contains: a headless default would serve
+    // the mobile tree, and an agent then cannot find the navigation an operator
+    // sees.
+    let browser = Browser::new();
+    let session = browser
+        .open_session(SessionOptions {
+            viewport: tinybrowser::Viewport {
+                mobile: true,
+                device_scale_factor: 2.0,
+                ..tinybrowser::Viewport::desktop(390, 844)
+            },
+            user_agent: Some("tinybrowser-test/1.0".to_string()),
+            ..options()
+        })
+        .await
+        .expect("a browser is available; see this file's docs");
+
+    browser
+        .navigate(
+            &session.id,
+            &NavigateRequest::new(serve("<p>sized</p>").await),
+        )
+        .await
+        .expect("navigates");
+
+    let size = browser
+        .evaluate(
+            &session.id,
+            &tinybrowser::EvaluateRequest::new(
+                "[innerWidth, devicePixelRatio, navigator.userAgent]",
+            ),
+        )
+        .await
+        .expect("evaluates");
+
+    assert_eq!(size[0], serde_json::json!(390));
+    assert_eq!(size[1], serde_json::json!(2.0));
+    assert_eq!(size[2], serde_json::json!("tinybrowser-test/1.0"));
+
+    browser.close_session(&session.id).await.expect("closes");
+}
+
+#[tokio::test]
+async fn live_navigation_settles_at_every_wait_mode() {
+    if !enabled() {
+        return;
+    }
+    let (browser, session) = on("<p>first</p>").await;
+
+    for wait_until in [
+        WaitUntil::Commit,
+        WaitUntil::DomContentLoaded,
+        WaitUntil::Load,
+        WaitUntil::NetworkIdle,
+    ] {
+        let url = serve("<p>settled</p>").await;
+        browser
+            .navigate(
+                &session.id,
+                &NavigateRequest {
+                    url,
+                    wait_until,
+                    timeout_ms: Some(10_000),
+                },
+            )
+            .await
+            .unwrap_or_else(|error| panic!("{wait_until:?}: {error}"));
+    }
+
+    browser.close_session(&session.id).await.expect("closes");
+}
