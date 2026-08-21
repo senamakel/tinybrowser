@@ -1,0 +1,280 @@
+//! Finding a Chrome on this host, and starting one.
+//!
+//! # Why the module launches at all
+//!
+//! A host that already runs a browser should point the module at it with
+//! [`tinybrowser_bus::SessionOptions::endpoint`] — that is the better
+//! arrangement, and it is the one a sandbox or a container deployment will use.
+//! Launching exists for the ordinary case where nobody has arranged anything and
+//! an agent needs a browser now.
+//!
+//! # Discovery is a fixed list, not a search
+//!
+//! [`find_executable`] checks an environment override, then a short list of
+//! conventional paths. It does not scan, and it does not consult a package
+//! manager. A module that goes looking for executables to run is a module whose
+//! behaviour depends on what else is installed on the host, and the failure mode
+//! of guessing wrong — launching some unrelated binary that happens to sit at a
+//! plausible path — is worse than reporting that no browser was found.
+
+use std::path::PathBuf;
+use std::process::Stdio;
+use std::time::Duration;
+
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::process::{Child, Command};
+
+use crate::error::{Error, Result};
+
+/// Environment variable naming the browser to launch.
+///
+/// The escape hatch for a host whose Chrome is somewhere this module would never
+/// guess — a Nix store path, a Chrome for Testing download, a container image
+/// that puts it under `/opt`.
+pub(crate) const EXECUTABLE_ENV: &str = "TINYBROWSER_CHROME";
+
+/// How long to wait for a launched browser to print its debugger URL.
+///
+/// A cold Chrome on a loaded machine takes a few seconds; one that is going to
+/// fail usually does so immediately. Twenty seconds is generous for the first
+/// and irrelevant to the second.
+const STARTUP_TIMEOUT: Duration = Duration::from_secs(20);
+
+/// The paths a Chrome or Chromium is conventionally installed at.
+///
+/// Ordered so that a browser built for automation wins over the user's daily
+/// browser: launching the latter with a fresh profile is technically fine and
+/// socially alarming, since it can surface a second window in front of somebody
+/// who did not ask for one.
+#[cfg(target_os = "linux")]
+const CANDIDATES: &[&str] = &[
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
+    "/usr/bin/google-chrome",
+    "/usr/bin/google-chrome-stable",
+    "/snap/bin/chromium",
+    "/usr/bin/brave-browser",
+];
+
+#[cfg(target_os = "macos")]
+const CANDIDATES: &[&str] = &[
+    "/Applications/Chromium.app/Contents/MacOS/Chromium",
+    "/Applications/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+];
+
+#[cfg(target_os = "windows")]
+const CANDIDATES: &[&str] = &[
+    r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+    r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+    r"C:\Program Files\Chromium\Application\chrome.exe",
+];
+
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+const CANDIDATES: &[&str] = &[];
+
+/// The flags every launch carries, and why each one is here.
+///
+/// This list is short on purpose. Every flag is a behaviour difference between
+/// what the module sees and what a person would see, and a module whose browser
+/// no longer resembles a browser stops being useful for checking what a page
+/// actually does.
+const BASE_ARGS: &[&str] = &[
+    // Port 0 asks the operating system for a free port. A fixed port makes two
+    // sessions on one host collide, and makes the collision look like a browser
+    // that will not start.
+    "--remote-debugging-port=0",
+    // Without this, the first run shows a profile picker and a welcome tab, and
+    // the page under test is not the active one.
+    "--no-first-run",
+    "--no-default-browser-check",
+    "--disable-background-networking",
+    // A hidden window still schedules its timers at full rate, which is what a
+    // page waiting on an animation or a poll needs.
+    "--disable-backgrounding-occluded-windows",
+    "--disable-renderer-backgrounding",
+    "--disable-background-timer-throttling",
+    // The popup that offers to save a password steals focus and covers the page.
+    "--password-store=basic",
+    "--use-mock-keychain",
+];
+
+/// A browser this module started.
+///
+/// Holding the [`Child`] is what makes the process ours to end: a launched
+/// browser that outlives its session is a headless Chrome nobody knows about,
+/// holding a profile directory open, until the host reboots.
+#[derive(Debug)]
+pub(crate) struct LaunchedBrowser {
+    /// The browser WebSocket URL it printed on startup.
+    pub(crate) websocket_url: String,
+    child: Child,
+    profile: Option<PathBuf>,
+}
+
+impl LaunchedBrowser {
+    /// Ends the browser and removes the profile directory this module created.
+    ///
+    /// Errors are deliberately swallowed: this runs on the way out, and a
+    /// browser that has already exited or a directory already gone are both the
+    /// outcome being asked for.
+    pub(crate) async fn shutdown(mut self) {
+        let _ = self.child.kill().await;
+        if let Some(profile) = self.profile.take() {
+            let _ = tokio::fs::remove_dir_all(profile).await;
+        }
+    }
+}
+
+/// The browser this host should launch.
+///
+/// # Errors
+///
+/// [`Error::BrowserUnavailable`] when neither the override nor any conventional
+/// path names an existing file.
+pub(crate) fn find_executable(configured: Option<&str>) -> Result<PathBuf> {
+    if let Some(path) = configured {
+        let path = PathBuf::from(path);
+        return if path.exists() {
+            Ok(path)
+        } else {
+            Err(Error::browser_unavailable(format!(
+                "configured browser {} does not exist",
+                path.display()
+            )))
+        };
+    }
+
+    if let Ok(path) = std::env::var(EXECUTABLE_ENV) {
+        let path = PathBuf::from(path);
+        return if path.exists() {
+            Ok(path)
+        } else {
+            Err(Error::browser_unavailable(format!(
+                "{EXECUTABLE_ENV} points at {}, which does not exist",
+                path.display()
+            )))
+        };
+    }
+
+    CANDIDATES
+        .iter()
+        .map(PathBuf::from)
+        .find(|path| path.exists())
+        .ok_or_else(|| {
+            Error::browser_unavailable(format!(
+                "no chrome or chromium found on this host; install one, or set {EXECUTABLE_ENV} \
+                 to its path, or give the session an endpoint to attach to instead"
+            ))
+        })
+}
+
+/// Starts a browser and waits for it to announce its debugger socket.
+///
+/// `profile` is the user data directory. When it is `None` a fresh temporary
+/// one is created and removed on [`LaunchedBrowser::shutdown`], so one session's
+/// cookies and logins never reach the next.
+///
+/// # Errors
+///
+/// [`Error::BrowserUnavailable`] when the process cannot be spawned, exits
+/// during startup, or does not print a debugger URL within the startup deadline.
+pub(crate) async fn launch(
+    executable: &std::path::Path,
+    headless: bool,
+    profile: Option<&str>,
+    extra_args: &[String],
+) -> Result<LaunchedBrowser> {
+    let (profile_dir, owned) = match profile {
+        Some(path) => (PathBuf::from(path), false),
+        None => (temporary_profile()?, true),
+    };
+
+    let mut command = Command::new(executable);
+    command
+        .args(BASE_ARGS)
+        .arg(format!("--user-data-dir={}", profile_dir.display()));
+
+    if headless {
+        // The "new" headless mode is the same renderer as headed Chrome. The
+        // old one was a separate implementation that quietly differed on
+        // exactly the things a browser is used to check.
+        command.arg("--headless=new");
+        // Native scrollbars are drawn into headless screenshots and change the
+        // page width by a scrollbar's worth between one run and the next.
+        command.arg("--hide-scrollbars");
+    }
+
+    command
+        .args(extra_args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        // Chrome prints its debugger URL to stderr, and this is the only
+        // discovery path that works with `--remote-debugging-port=0`: the port
+        // is not known to anyone until the browser has chosen it.
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+
+    let mut child = command.spawn().map_err(|error| {
+        Error::browser_unavailable(format!("launching {}: {error}", executable.display()))
+    })?;
+
+    let Some(stderr) = child.stderr.take() else {
+        let _ = child.kill().await;
+        return Err(Error::browser_unavailable(
+            "launched browser exposed no stderr to read its debugger url from".to_string(),
+        ));
+    };
+
+    let websocket_url = match tokio::time::timeout(STARTUP_TIMEOUT, read_websocket_url(stderr)).await
+    {
+        Ok(Ok(url)) => url,
+        Ok(Err(error)) => {
+            let _ = child.kill().await;
+            return Err(error);
+        }
+        Err(_) => {
+            let _ = child.kill().await;
+            return Err(Error::browser_unavailable(format!(
+                "{} did not report a devtools url within {}s",
+                executable.display(),
+                STARTUP_TIMEOUT.as_secs()
+            )));
+        }
+    };
+
+    Ok(LaunchedBrowser {
+        websocket_url,
+        child,
+        profile: owned.then_some(profile_dir),
+    })
+}
+
+/// Reads Chrome's startup banner until it names the debugger socket.
+async fn read_websocket_url(stderr: tokio::process::ChildStderr) -> Result<String> {
+    const MARKER: &str = "DevTools listening on ";
+
+    let mut lines = BufReader::new(stderr).lines();
+    while let Ok(Some(line)) = lines.next_line().await {
+        if let Some(url) = line.split_once(MARKER) {
+            return Ok(url.1.trim().to_string());
+        }
+    }
+
+    Err(Error::browser_unavailable(
+        "browser exited during startup without reporting a devtools url".to_string(),
+    ))
+}
+
+/// A private profile directory for one launched browser.
+fn temporary_profile() -> Result<PathBuf> {
+    let path = std::env::temp_dir().join(format!("tinybrowser-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&path).map_err(|error| {
+        Error::browser_unavailable(format!(
+            "creating profile directory {}: {error}",
+            path.display()
+        ))
+    })?;
+    Ok(path)
+}
