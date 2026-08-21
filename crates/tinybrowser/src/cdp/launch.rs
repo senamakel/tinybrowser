@@ -296,7 +296,7 @@ async fn read_websocket_url(stderr: tokio::process::ChildStderr) -> Result<Strin
 ///
 /// The sandbox case is called out by name because it is the one an operator
 /// will actually hit — a container without `SYS_ADMIN`, or an Ubuntu 23.10 or
-/// later host, where unprivileged user namespaces are restricted by AppArmor —
+/// later host, where unprivileged user namespaces are restricted by `AppArmor` —
 /// and because the raw stack trace Chrome prints buries the one line that says
 /// what to do. The remedy is deliberately *reported* rather than applied:
 /// `--no-sandbox` removes the renderer's isolation from the pages it visits,
