@@ -56,7 +56,7 @@ const NETWORK_IDLE_GRACE: Duration = Duration::from_secs(2);
 /// the browser handles the input event and commits — so this only has to be long
 /// enough to see it begin. Most clicks start nothing at all and pay the whole
 /// period for nothing, which is why it is this short rather than generous.
-const INPUT_NAVIGATION_GRACE: Duration = Duration::from_millis(3000);
+const INPUT_NAVIGATION_GRACE: Duration = Duration::from_millis(300);
 
 /// How often to ask the page what it is doing while waiting for it to settle.
 const READY_POLL: Duration = Duration::from_millis(25);
@@ -278,6 +278,7 @@ impl Session {
     pub(crate) async fn settle_after_input(
         &self,
         events: tokio::sync::broadcast::Receiver<crate::cdp::CdpEvent>,
+        before: Option<&str>,
     ) {
         if tokio::time::timeout(INPUT_NAVIGATION_GRACE, self.await_navigation_start(events))
             .await
@@ -288,12 +289,26 @@ impl Session {
             return;
         }
 
+        // A navigation has been *requested*, which is not the same as begun. The
+        // old document is still current and still reports `complete`, so waiting
+        // for readiness alone finishes instantly and hands back the page the
+        // click was supposed to leave. What has to be waited for is the document
+        // actually changing: a different URL, or a round trip through a state
+        // that is not `complete` for a reload or a same-URL submission.
+        let mut left_the_old_document = false;
+
         let _ = tokio::time::timeout(self.deadline(None), async {
             loop {
-                if let Some((_, ready)) = self.document_status().await
-                    && ready == "complete"
-                {
-                    return;
+                match self.document_status().await {
+                    // The execution context is being torn down: that is the old
+                    // document going away.
+                    None => left_the_old_document = true,
+                    Some((_, ready)) if ready != "complete" => left_the_old_document = true,
+                    Some((href, _)) => {
+                        if before.is_none_or(|before| href != before) || left_the_old_document {
+                            return;
+                        }
+                    }
                 }
                 tokio::time::sleep(READY_POLL).await;
             }
@@ -335,9 +350,6 @@ impl Session {
                 Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
             };
 
-            if event.session_id.as_deref() == Some(self.page.as_str()) {
-                eprintln!("DIAGEV {}", event.method);
-            }
             if event.session_id.as_deref() == Some(self.page.as_str())
                 && STARTED.contains(&event.method.as_str())
             {

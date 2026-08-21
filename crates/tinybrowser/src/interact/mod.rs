@@ -235,8 +235,10 @@ async fn click(session: &Session, target: &Target, new_tab: bool, count: u32) ->
     };
 
     // Subscribed before the click, so a navigation it starts is not missed by a
-    // subscription opened after the fact.
+    // subscription opened after the fact, and the current URL sampled with it so
+    // the new document can be told from the old one.
     let events = session.events();
+    let before = session.document_status().await.map(|(href, _)| href);
 
     for kind in ["mousePressed", "mouseReleased"] {
         session
@@ -254,7 +256,7 @@ async fn click(session: &Session, target: &Target, new_tab: bool, count: u32) ->
             .await?;
     }
 
-    session.settle_after_input(events).await;
+    session.settle_after_input(events, before.as_deref()).await;
     Ok(())
 }
 
@@ -344,6 +346,7 @@ async fn press(session: &Session, chord: &str) -> Result<()> {
     // Pressing Enter in a form submits it, which is a navigation as much as a
     // click on the submit button is.
     let events = session.events();
+    let before = session.document_status().await.map(|(href, _)| href);
 
     for kind in ["keyDown", "keyUp"] {
         let mut params = json!({
@@ -373,7 +376,7 @@ async fn press(session: &Session, chord: &str) -> Result<()> {
         session.send("Input.dispatchKeyEvent", params).await?;
     }
 
-    session.settle_after_input(events).await;
+    session.settle_after_input(events, before.as_deref()).await;
     Ok(())
 }
 
