@@ -52,10 +52,18 @@ const NETWORK_IDLE_GRACE: Duration = Duration::from_secs(2);
 
 /// How long to watch for a navigation that an input event started.
 ///
-/// A click on a link or a submit button starts its navigation almost at once —
-/// the browser handles the input event and commits — so this only has to be long
-/// enough to see it begin. Most clicks start nothing at all and pay the whole
-/// period for nothing, which is why it is this short rather than generous.
+/// This is a tax on every click and key press that does *not* navigate — a menu
+/// opening, a checkbox toggling — because there is no signal for "nothing is
+/// going to happen"; there is only the absence of a signal, and absence takes
+/// time to establish. The bound is deliberate rather than incidental: a click
+/// that misses its navigation hands the caller the page it was trying to leave,
+/// and an agent then reasons about the wrong document. Paying a fraction of a
+/// second per click to make that impossible is the better side of the trade.
+///
+/// `Page.frameRequestedNavigation` is emitted when the navigation is *scheduled*
+/// rather than when it commits, so this only has to cover scheduling latency,
+/// not a network round trip. It is set well above what that takes on an idle
+/// machine so that a loaded one does not silently start missing navigations.
 const INPUT_NAVIGATION_GRACE: Duration = Duration::from_millis(300);
 
 /// How often to ask the page what it is doing while waiting for it to settle.
