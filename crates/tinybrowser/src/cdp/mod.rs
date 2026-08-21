@@ -1,9 +1,9 @@
-//! The Chrome DevTools Protocol: the socket, the browser behind it, and the
+//! The Chrome `DevTools` Protocol: the socket, the browser behind it, and the
 //! commands this crate sends over it.
 //!
-//! # Why CDP and not WebDriver
+//! # Why CDP and not `WebDriver`
 //!
-//! WebDriver is a request-per-action HTTP protocol with a session-shaped API and
+//! `WebDriver` is a request-per-action HTTP protocol with a session-shaped API and
 //! a separate driver binary to install, version-match, and keep alive. CDP is a
 //! single bidirectional socket straight into the browser: one connection
 //! multiplexes every command and every event, the accessibility tree and the

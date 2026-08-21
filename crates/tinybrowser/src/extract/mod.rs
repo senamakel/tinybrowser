@@ -79,16 +79,13 @@ async fn html(
     selector: Option<&str>,
     deadline: std::time::Duration,
 ) -> Result<String> {
-    let node = match selector {
-        Some(selector) => super::interact::resolve::selector_node(session, selector).await?,
-        None => {
-            let document = session.send("DOM.getDocument", json!({ "depth": 0 })).await?;
-            document
-                .get("root")
-                .and_then(|root| root.get("backendNodeId"))
-                .and_then(Value::as_i64)
-                .ok_or_else(|| Error::page("page has no document".to_string()))?
-        }
+    let node = if let Some(selector) = selector { super::interact::resolve::selector_node(session, selector).await? } else {
+        let document = session.send("DOM.getDocument", json!({ "depth": 0 })).await?;
+        document
+            .get("root")
+            .and_then(|root| root.get("backendNodeId"))
+            .and_then(Value::as_i64)
+            .ok_or_else(|| Error::page("page has no document".to_string()))?
     };
 
     let outer = session

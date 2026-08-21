@@ -58,7 +58,7 @@ function () {
 /// `select()` covers `<input>` and `<textarea>`; the range selection covers a
 /// `contenteditable`, which has no `select` and is otherwise filled by appending
 /// to what is already there.
-pub(crate) const SELECT_ALL: &str = r#"
+pub(crate) const SELECT_ALL: &str = r"
 function () {
   this.focus();
   if (typeof this.select === 'function') {
@@ -72,32 +72,32 @@ function () {
   selection.addRange(range);
   return true;
 }
-"#;
+";
 
 /// Reads an element's text the way it reads on screen.
 ///
 /// `innerText` rather than `textContent`: the second returns the text of hidden
 /// nodes and ignores line breaks introduced by layout, so a caller comparing it
 /// with what a person sees finds neither the same content nor the same shape.
-pub(crate) const TEXT: &str = r#"
+pub(crate) const TEXT: &str = r"
 function () {
   if (this.value !== undefined && this.tagName && /^(INPUT|TEXTAREA|SELECT)$/.test(this.tagName)) {
     return String(this.value);
   }
   return (this.innerText || this.textContent || '').trim();
 }
-"#;
+";
 
 /// Reads one attribute, or null when the element does not carry it.
-pub(crate) const ATTRIBUTE: &str = r#"
+pub(crate) const ATTRIBUTE: &str = r"
 function (name) {
   const value = this.getAttribute(name);
   return value === null ? null : String(value);
 }
-"#;
+";
 
 /// Whether the element is rendered: in the document, with a box, and not hidden.
-pub(crate) const IS_VISIBLE: &str = r#"
+pub(crate) const IS_VISIBLE: &str = r"
 function () {
   if (!this.isConnected) return false;
   const style = window.getComputedStyle(this);
@@ -107,14 +107,14 @@ function () {
   const rect = this.getBoundingClientRect();
   return rect.width > 0 && rect.height > 0;
 }
-"#;
+";
 
 /// Chooses options in a `<select>` and fires the events a form listens for.
 ///
 /// Setting `selected` without dispatching leaves the page's own state untouched:
 /// a framework-controlled select re-renders back to its previous value the
 /// moment anything else changes.
-pub(crate) const SELECT_OPTIONS: &str = r#"
+pub(crate) const SELECT_OPTIONS: &str = r"
 function (values) {
   if (!this.options) throw new Error('element is not a select');
   const wanted = new Set(values);
@@ -129,22 +129,22 @@ function (values) {
   this.dispatchEvent(new Event('change', { bubbles: true }));
   return matched;
 }
-"#;
+";
 
 /// Whether a checkbox or radio is already in the wanted state.
-pub(crate) const CHECKED: &str = r#"
+pub(crate) const CHECKED: &str = r"
 function () {
   return Boolean(this.checked);
 }
-"#;
+";
 
 /// Scrolls an element's own scroll box.
-pub(crate) const SCROLL_BY: &str = r#"
+pub(crate) const SCROLL_BY: &str = r"
 function (x, y) {
   this.scrollBy(x, y);
   return { left: this.scrollLeft, top: this.scrollTop };
 }
-"#;
+";
 
 /// Finds an element semantically, and returns it for the caller to describe.
 ///
@@ -152,11 +152,11 @@ function (x, y) {
 /// hard part is shared: gather candidates, normalise their text the same way the
 /// accessibility name is normalised, and pick the nth match. Splitting it would
 /// mean seven copies of that normalisation, drifting apart one bug at a time.
-pub(crate) const LOCATE: &str = r#"
+pub(crate) const LOCATE: &str = r"
 function (by, value, name, exact, index) {
   const norm = (text) => (text || '')
     .replace(/ /g, ' ')
-    .replace(/[​‌‍⁠﻿]/g, '')
+    .replace(/[\u{200B}‌‍\u{2060}﻿]/g, '')
     .trim()
     .replace(/\s+/g, ' ')
     .toLowerCase();
@@ -234,4 +234,4 @@ function (by, value, name, exact, index) {
   const pool = rendered.length > 0 ? rendered : candidates;
   return pool[index] || null;
 }
-"#;
+";

@@ -312,11 +312,10 @@ async fn press(session: &Session, chord: &str) -> Result<()> {
         });
 
         // `text` on a keyUp would insert the character a second time.
-        if kind == "keyDown" {
-            if let Some(text) = &stroke.text {
+        if kind == "keyDown"
+            && let Some(text) = &stroke.text {
                 params["text"] = json!(text);
             }
-        }
 
         session.send("Input.dispatchKeyEvent", params).await?;
     }
@@ -461,8 +460,7 @@ async fn history(session: &Session, offset: i64) -> Result<ActionOutcome> {
     let entries = history
         .get("entries")
         .and_then(Value::as_array)
-        .map(Vec::len)
-        .unwrap_or(0);
+        .map_or(0, Vec::len);
 
     let wanted = current + offset;
     if wanted < 0 || usize::try_from(wanted).unwrap_or(usize::MAX) >= entries {

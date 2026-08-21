@@ -77,19 +77,16 @@ impl Session {
     /// reached, and [`Error::PageError`] when the browser rejects the setup
     /// commands.
     pub(crate) async fn open(id: SessionId, options: SessionOptions) -> Result<Self> {
-        let (endpoint, launched) = match options.endpoint.as_deref() {
-            Some(configured) => (endpoint::resolve(configured).await?, None),
-            None => {
-                let executable = launch::find_executable(options.executable.as_deref())?;
-                let browser = launch::launch(
-                    &executable,
-                    options.headless,
-                    options.user_data_dir.as_deref(),
-                    &options.args,
-                )
-                .await?;
-                (browser.websocket_url.clone(), Some(browser))
-            }
+        let (endpoint, launched) = if let Some(configured) = options.endpoint.as_deref() { (endpoint::resolve(configured).await?, None) } else {
+            let executable = launch::find_executable(options.executable.as_deref())?;
+            let browser = launch::launch(
+                &executable,
+                options.headless,
+                options.user_data_dir.as_deref(),
+                &options.args,
+            )
+            .await?;
+            (browser.websocket_url.clone(), Some(browser))
         };
 
         let client = CdpClient::connect(&endpoint).await?;

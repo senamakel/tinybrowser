@@ -267,13 +267,11 @@ impl<'a> Walk<'a> {
             }
         }
 
-        if self.request.include_urls {
-            if let Some(url) = node.property("url").map(|value| clean(&value.as_text())) {
-                if !url.is_empty() {
+        if self.request.include_urls
+            && let Some(url) = node.property("url").map(|value| clean(&value.as_text()))
+                && !url.is_empty() {
                     line.push_str(&format!(" url=\"{url}\""));
                 }
-            }
-        }
 
         if let Some(reference) = reference {
             line.push_str(&format!(" @{reference}"));

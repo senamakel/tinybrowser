@@ -1,4 +1,4 @@
-//! A Chrome DevTools Protocol browser engine for agents, packaged as an
+//! A Chrome `DevTools` Protocol browser engine for agents, packaged as an
 //! installable `TinyBus` module.
 //!
 //! # What this is for
