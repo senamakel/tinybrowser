@@ -576,6 +576,7 @@ async fn a_browser_that_starts_and_says_nothing_times_out() {
     std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755))
         .expect("makes it executable");
 
+    let started = std::time::Instant::now();
     let error = launch_within(
         &script,
         true,
@@ -585,6 +586,7 @@ async fn a_browser_that_starts_and_says_nothing_times_out() {
     )
     .await
     .expect_err("times out");
+    eprintln!("ELAPSED {:?}", started.elapsed());
 
     assert!(matches!(error, Error::BrowserUnavailable { .. }), "{error}");
     assert!(
