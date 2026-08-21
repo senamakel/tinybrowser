@@ -142,12 +142,12 @@ impl BrowserService {
     /// [`tinybrowser_bus::is_compatible`]. Doing it the other way round — making
     /// a real call and reading the failure — cannot distinguish "this member
     /// does not exist" from "this member failed".
-    #[allow(
-        clippy::unused_async,
-        reason = "the interface macro requires every member to be an async fn"
-    )]
     async fn contract_version(&self) -> BusResult<(u32, u32)> {
-        Ok(tinybrowser_bus::CONTRACT_VERSION)
+        // The only member that answers from a constant. The interface macro
+        // requires every member to be an `async fn`, so the future is made
+        // explicit rather than suppressing the lint that notices there is
+        // nothing to await.
+        std::future::ready(Ok(tinybrowser_bus::CONTRACT_VERSION)).await
     }
 }
 
