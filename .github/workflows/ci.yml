@@ -52,6 +52,31 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      # Named explicitly rather than left to the module's own discovery order.
+      # The runner has several browsers on it, including a snap-packaged
+      # `/usr/bin/chromium` that starts, says nothing, and is timed out — and a
+      # build should not go red because the search order changed under it. This
+      # also prints which browser was chosen, so a future failure says so in the
+      # log instead of costing a round trip to find out.
+      - name: Select a browser for the live tests
+        run: |
+          set -euo pipefail
+          for candidate in \
+            /usr/bin/google-chrome \
+            /usr/bin/google-chrome-stable \
+            /opt/google/chrome/chrome \
+            /usr/bin/chromium-browser \
+            /usr/bin/chromium
+          do
+            [ -x "$candidate" ] || continue
+            echo "selected $candidate"
+            "$candidate" --version || true
+            echo "TINYBROWSER_CHROME=$candidate" >> "$GITHUB_ENV"
+            exit 0
+          done
+          echo "no browser on this runner; the live tests cannot run" >&2
+          exit 1
+
       - name: Check formatting
         run: cargo fmt --all -- --check
 
