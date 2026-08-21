@@ -156,7 +156,7 @@ pub(crate) const LOCATE: &str = r"
 function (by, value, name, exact, index) {
   // The same normalisation the accessibility name gets in `snapshot::render`:
   // pages build their labels out of non-breaking spaces and zero-width joiners,
-  // and an agent matching on "Add to cart" finds nothing otherwise. Written as
+  // and an agent matching on 'Add to cart' finds nothing otherwise. Written as
   // escapes rather than literals so the characters are visible in this source.
   const norm = (text) => (text || '')
     .replace(/\u00A0/g, ' ')
