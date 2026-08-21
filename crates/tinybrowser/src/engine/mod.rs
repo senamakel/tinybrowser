@@ -182,7 +182,8 @@ impl Browser {
     ///
     /// [`Error::NoSuchSession`], plus anything the capture reports.
     pub async fn snapshot(&self, id: &SessionId, request: &SnapshotRequest) -> Result<Snapshot> {
-        snapshot::capture(&self.session(id).await?, request).await
+        let session = self.session(id).await?;
+        snapshot::capture(&session, request).await
     }
 
     /// Performs one interaction.
@@ -195,7 +196,8 @@ impl Browser {
         id: &SessionId,
         action: &tinybrowser_bus::Action,
     ) -> Result<ActionOutcome> {
-        interact::perform(&self.session(id).await?, action).await
+        let session = self.session(id).await?;
+        interact::perform(&session, action).await
     }
 
     /// Reads a session's active page as text.
@@ -204,7 +206,8 @@ impl Browser {
     ///
     /// [`Error::NoSuchSession`], plus anything the extraction reports.
     pub async fn read_page(&self, id: &SessionId, request: &ReadRequest) -> Result<PageText> {
-        extract::read(&self.session(id).await?, request).await
+        let session = self.session(id).await?;
+        extract::read(&session, request).await
     }
 
     /// Evaluates JavaScript in a session's active page.
@@ -235,7 +238,8 @@ impl Browser {
         id: &SessionId,
         request: &ScreenshotRequest,
     ) -> Result<OutputRef> {
-        capture::screenshot(&self.session(id).await?, request, &self.outputs).await
+        let session = self.session(id).await?;
+        capture::screenshot(&session, request, &self.outputs).await
     }
 
     /// Reads one chunk of a held output.
