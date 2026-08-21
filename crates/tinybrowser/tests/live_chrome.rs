@@ -61,7 +61,17 @@ fn page(body: &str) -> String {
 fn urlencode(raw: &str) -> String {
     raw.chars()
         .map(|character| match character {
-            'A'..='Z' | 'a'..='z' | '0'..='9' | '-' | '_' | '.' | '~' | '!' | '*' | '(' | ')'
+            'A'..='Z'
+            | 'a'..='z'
+            | '0'..='9'
+            | '-'
+            | '_'
+            | '.'
+            | '~'
+            | '!'
+            | '*'
+            | '('
+            | ')'
             | '\'' => character.to_string(),
             other => other
                 .to_string()
@@ -130,8 +140,8 @@ async fn live_a_snapshot_ref_resolves_to_the_element_it_named() {
     // The single most important property in the crate: an agent acts on the ref
     // it read, and the node behind it is the one the snapshot described.
     let (browser, session) = on("<button id='a'>Alpha</button><button id='b'>Beta</button>\
-         <script>document.body.onclick = (e) => { document.title = e.target.id; };</script>",
-    ).await;
+         <script>document.body.onclick = (e) => { document.title = e.target.id; };</script>")
+    .await;
 
     let snapshot = browser
         .snapshot(&session.id, &SnapshotRequest::interactive())
@@ -173,7 +183,10 @@ async fn live_a_ref_from_a_previous_snapshot_is_refused() {
     // that is gone. Acting on one must say so rather than resolve to whatever
     // now occupies that position.
     browser
-        .navigate(&session.id, &NavigateRequest::new(page("<button>Beta</button>")))
+        .navigate(
+            &session.id,
+            &NavigateRequest::new(page("<button>Beta</button>")),
+        )
         .await
         .expect("navigates");
 
@@ -196,9 +209,11 @@ async fn live_a_ref_from_a_previous_snapshot_is_refused() {
 async fn live_a_covered_element_is_refused_and_the_cover_is_named() {
     // A click dispatched at a point a banner covers is delivered to the banner,
     // and without this check the caller is told it succeeded.
-    let (browser, session) = on("<button id='target' style='position:fixed;top:50px;left:50px'>Buy</button>\
+    let (browser, session) = on(
+        "<button id='target' style='position:fixed;top:50px;left:50px'>Buy</button>\
          <div id='banner' style='position:fixed;inset:0;background:#000'>Consent</div>",
-    ).await;
+    )
+    .await;
 
     let error = browser
         .perform(
@@ -222,8 +237,8 @@ async fn live_filling_replaces_the_value_and_fires_the_page_handlers() {
     // input sees them. Assigning `value` directly would not.
     let (browser, session) = on("<input id='q' value='old'>\
          <script>document.getElementById('q').addEventListener('input', () => { \
-            document.title = document.getElementById('q').value; });</script>",
-    ).await;
+            document.title = document.getElementById('q').value; });</script>")
+    .await;
 
     browser
         .perform(
@@ -255,8 +270,8 @@ async fn live_filling_replaces_the_value_and_fires_the_page_handlers() {
 async fn live_pressing_a_key_reaches_the_page() {
     let (browser, session) = on("<input id='q'>\
          <script>document.getElementById('q').addEventListener('keydown', (e) => { \
-            document.title = e.key + ':' + e.keyCode; });</script>",
-    ).await;
+            document.title = e.key + ':' + e.keyCode; });</script>")
+    .await;
 
     browser
         .perform(
@@ -286,8 +301,8 @@ async fn live_pressing_a_key_reaches_the_page() {
 #[tokio::test]
 async fn live_a_locator_finds_an_element_by_what_it_says() {
     let (browser, session) = on("<button>Cancel</button><button>Submit order</button>\
-         <script>document.body.onclick = (e) => { document.title = e.target.innerText; };</script>",
-    ).await;
+         <script>document.body.onclick = (e) => { document.title = e.target.innerText; };</script>")
+    .await;
 
     let outcome = browser
         .perform(
@@ -345,9 +360,11 @@ async fn live_is_visible_answers_false_rather_than_failing() {
 
 #[tokio::test]
 async fn live_reading_a_page_produces_markdown_a_model_can_use() {
-    let (browser, session) = on("<h1>Title</h1><p>Body text.</p><a href='https://example.com/x'>Link</a>\
+    let (browser, session) = on(
+        "<h1>Title</h1><p>Body text.</p><a href='https://example.com/x'>Link</a>\
          <script>console.log('not content')</script><style>p{color:red}</style>",
-    ).await;
+    )
+    .await;
 
     let text = browser
         .read_page(&session.id, &ReadRequest::default())
@@ -374,10 +391,7 @@ async fn live_evaluating_returns_a_value_and_reports_a_throw() {
     let (browser, session) = on("<p>page</p>").await;
 
     let value = browser
-        .evaluate(
-            &session.id,
-            &tinybrowser::EvaluateRequest::new("1 + 1"),
-        )
+        .evaluate(&session.id, &tinybrowser::EvaluateRequest::new("1 + 1"))
         .await
         .expect("evaluates");
     assert_eq!(value, serde_json::json!(2));
@@ -445,7 +459,10 @@ async fn live_an_origin_allowlist_refuses_what_it_does_not_admit() {
         .expect("a browser is available; see this file's docs");
 
     let error = browser
-        .navigate(&session.id, &NavigateRequest::new("https://elsewhere.test/"))
+        .navigate(
+            &session.id,
+            &NavigateRequest::new("https://elsewhere.test/"),
+        )
         .await
         .expect_err("refused");
 
@@ -460,7 +477,10 @@ async fn live_sessions_are_listed_and_close_cleanly() {
     let listed = browser.list_sessions().await;
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0].id, session.id);
-    assert!(listed[0].launched, "a launched browser reports itself as one");
+    assert!(
+        listed[0].launched,
+        "a launched browser reports itself as one"
+    );
 
     browser.close_session(&session.id).await.expect("closes");
     assert!(browser.list_sessions().await.is_empty());
