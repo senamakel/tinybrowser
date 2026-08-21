@@ -118,7 +118,11 @@ pub(crate) fn parse(chord: &str) -> Result<KeyStroke> {
             key_code: *key_code,
             // A modified press inserts nothing: `Control+Enter` submits a form,
             // it does not type a carriage return into it.
-            text: (mask & !SHIFT == 0).then(|| (*text)?.to_string()).flatten(),
+            text: if mask & !SHIFT == 0 {
+                text.map(str::to_string)
+            } else {
+                None
+            },
         });
     }
 
@@ -134,7 +138,11 @@ pub(crate) fn parse(chord: &str) -> Result<KeyStroke> {
         key: character.to_string(),
         code: code_for(character),
         key_code: virtual_code(character),
-        text: (mask & !SHIFT == 0).then(|| character.to_string()),
+        text: if mask & !SHIFT == 0 {
+            Some(character.to_string())
+        } else {
+            None
+        },
     })
 }
 

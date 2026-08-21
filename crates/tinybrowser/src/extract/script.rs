@@ -14,7 +14,7 @@
 /// Returns a string. The Markdown it produces is deliberately plain — headings,
 /// links, list items, code, and paragraphs — because it is read by a model
 /// rather than rendered. Anything more elaborate spends tokens on syntax.
-pub(crate) const EXTRACT: &str = r"
+pub(crate) const EXTRACT: &str = r#"
 function (format, selector) {
   const root = selector ? document.querySelector(selector) : document.body;
   if (!root) return null;
@@ -97,4 +97,4 @@ function (format, selector) {
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
-";
+"#;
