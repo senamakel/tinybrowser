@@ -288,8 +288,14 @@ async fn read_websocket_url(stderr: tokio::process::ChildStderr) -> Result<Strin
 /// which is not a default this module gets to choose on a host's behalf.
 fn diagnose(banner: &[String]) -> String {
     if banner.iter().any(|line| line.contains("No usable sandbox")) {
-        return "browser could not start because this host has no usable sandbox: unprivileged                 user namespaces are restricted, which is the default on Ubuntu 23.10 and later                 and in containers without the right capabilities. Either allow them for this                 binary, or accept the reduced isolation by adding "--no-sandbox" to the                 session's args"
-            .to_string();
+        return concat!(
+            "browser could not start because this host has no usable sandbox: unprivileged ",
+            "user namespaces are restricted, which is the default on Ubuntu 23.10 and later ",
+            "and in containers without the right capabilities. Either allow them for this ",
+            "binary, or accept the reduced isolation by adding --no-sandbox to the session's ",
+            "args",
+        )
+        .to_string();
     }
 
     let printed: Vec<&str> = banner
