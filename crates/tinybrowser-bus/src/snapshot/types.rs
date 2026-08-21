@@ -73,11 +73,17 @@ pub struct Snapshot {
     pub url: String,
     /// The document title.
     pub title: String,
-    /// Which snapshot of this session this is, counting from one.
+    /// Which generation of refs this snapshot minted.
     ///
-    /// A ref is only valid for the snapshot that minted it. Reporting the
-    /// sequence lets a host say "this ref is two snapshots old" rather than
-    /// discovering it by acting on the wrong element.
+    /// A ref is only valid for the generation that minted it, and the counter
+    /// moves on for every snapshot *and* every navigation — a navigation
+    /// replaces the document, so the refs naming its nodes are as dead as if a
+    /// new snapshot had replaced them. It is therefore a monotonic counter
+    /// rather than a count of snapshots: the first snapshot after a navigation
+    /// will not be number one.
+    ///
+    /// Reporting it lets a host say "this ref is two generations old" rather
+    /// than discovering it by acting on the wrong element.
     pub sequence: u64,
     /// The tree, as indented text with `@ref` markers.
     pub tree: String,
