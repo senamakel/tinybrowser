@@ -165,8 +165,10 @@ impl Browser {
     ///
     /// # Errors
     ///
-    /// [`Error::NoSuchSession`], plus anything
-    /// [`Session::navigate`](crate::session::Session::navigate) reports.
+    /// [`Error::NoSuchSession`], [`Error::InvalidInput`] for an unusable URL,
+    /// [`Error::BlockedByPolicy`] when the session's allowlist refuses it,
+    /// [`Error::PageError`] when the browser cannot reach it, and
+    /// [`Error::Timeout`] when it does not settle in time.
     pub async fn navigate(&self, id: &SessionId, request: &NavigateRequest) -> Result<PageState> {
         self.session(id).await?.navigate(request).await
     }
