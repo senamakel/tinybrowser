@@ -163,7 +163,7 @@ pub(crate) fn find_executable(configured: Option<&str>) -> Result<PathBuf> {
 /// test in the process, and the branch that matters most — a configured path
 /// that does not exist must *fail* rather than fall through to whatever browser
 /// happens to be installed — is unreachable on a machine that has one.
-fn resolve_executable(
+pub(crate) fn resolve_executable(
     configured: Option<&str>,
     from_env: Option<&str>,
     exists: &dyn Fn(&std::path::Path) -> bool,
