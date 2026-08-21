@@ -234,6 +234,10 @@ async fn click(session: &Session, target: &Target, new_tab: bool, count: u32) ->
         0
     };
 
+    // Subscribed before the click, so a navigation that commits immediately is
+    // not missed by a subscription opened after the fact.
+    let events = session.events();
+
     for kind in ["mousePressed", "mouseReleased"] {
         session
             .send(
@@ -250,6 +254,7 @@ async fn click(session: &Session, target: &Target, new_tab: bool, count: u32) ->
             .await?;
     }
 
+    session.settle_after_input(events).await;
     Ok(())
 }
 
@@ -336,6 +341,10 @@ async fn type_text(session: &Session, text: &str, delay_ms: Option<u64>) -> Resu
 async fn press(session: &Session, chord: &str) -> Result<()> {
     let stroke = keys::parse(chord)?;
 
+    // Pressing Enter in a form submits it, which is a navigation as much as a
+    // click on the submit button is.
+    let events = session.events();
+
     for kind in ["keyDown", "keyUp"] {
         let mut params = json!({
             "type": kind,
@@ -356,6 +365,7 @@ async fn press(session: &Session, chord: &str) -> Result<()> {
         session.send("Input.dispatchKeyEvent", params).await?;
     }
 
+    session.settle_after_input(events).await;
     Ok(())
 }
 

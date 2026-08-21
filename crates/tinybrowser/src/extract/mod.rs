@@ -28,12 +28,20 @@ pub(crate) async fn read(session: &Session, request: &ReadRequest) -> Result<Pag
         ReadFormat::Text | ReadFormat::Markdown => {
             match extract(session, request, deadline).await? {
                 Value::String(text) => text,
+                // The script answers null for two different situations, and a
+                // caller needs to tell them apart: a selector that matched
+                // nothing is the caller's to fix, while a document with no body
+                // is a page that is not ready — mid-navigation, most often —
+                // and is fixed by asking again.
                 Value::Null => {
-                    return Err(Error::NoSuchElement {
-                        target: request
-                            .selector
-                            .clone()
-                            .unwrap_or_else(|| "document.body".to_string()),
+                    return Err(match &request.selector {
+                        Some(selector) => Error::NoSuchElement {
+                            target: selector.clone(),
+                        },
+                        None => Error::page(
+                            "the page has no document body to read yet; it may still be loading"
+                                .to_string(),
+                        ),
                     });
                 }
                 other => other.to_string(),
