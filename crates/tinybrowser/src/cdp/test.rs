@@ -10,8 +10,8 @@
 use super::client::CdpClient;
 use super::endpoint::resolve;
 use super::launch::{
-    ARGS_ENV, EXECUTABLE_ENV, diagnose, environment_args, find_executable, launch,
-    resolve_executable,
+    ARGS_ENV, EXECUTABLE_ENV, diagnose, environment_args, find_executable, launch, launch_within,
+    profile_in, resolve_executable,
 };
 use crate::error::Error;
 
@@ -553,5 +553,54 @@ async fn a_headed_launch_into_a_named_profile_still_reports_its_failure() {
 
     assert!(matches!(error, Error::BrowserUnavailable { .. }), "{error}");
     assert!(profile.exists(), "a profile the caller named was removed");
+    let _ = std::fs::remove_dir_all(&profile);
+}
+
+#[tokio::test]
+async fn a_browser_that_starts_and_says_nothing_times_out() {
+    // The other startup failure: the process is alive and simply never reports
+    // a debugger url. Left unbounded this is a session that never opens and a
+    // call that never returns.
+    let Ok(shell) = which_shell() else { return };
+    let error = launch_within(
+        &shell,
+        true,
+        None,
+        &["-c".to_string(), "sleep 30".to_string()],
+        std::time::Duration::from_millis(200),
+    )
+    .await
+    .expect_err("times out");
+
+    assert!(matches!(error, Error::BrowserUnavailable { .. }), "{error}");
+    assert!(
+        error.to_string().contains("did not report a devtools url"),
+        "{error}"
+    );
+}
+
+#[test]
+fn a_profile_directory_that_cannot_be_created_is_reported() {
+    // A base that is a file, not a directory: nothing can be created under it.
+    let base = std::env::temp_dir().join(format!("tinybrowser-not-a-dir-{}", std::process::id()));
+    std::fs::write(&base, b"file").expect("writes the blocking file");
+
+    let error = profile_in(&base).expect_err("refused");
+
+    assert!(matches!(error, Error::BrowserUnavailable { .. }), "{error}");
+    assert!(error.to_string().contains("profile directory"), "{error}");
+    let _ = std::fs::remove_file(&base);
+}
+
+#[test]
+fn a_profile_directory_is_created_where_it_was_asked_for() {
+    let base = std::env::temp_dir();
+    let profile = profile_in(&base).expect("creates a profile directory");
+
+    assert!(profile.starts_with(&base));
+    assert!(profile.exists());
+    // Unguessable, so two sessions starting at once cannot collide.
+    assert_ne!(profile, profile_in(&base).expect("creates another"));
+
     let _ = std::fs::remove_dir_all(&profile);
 }

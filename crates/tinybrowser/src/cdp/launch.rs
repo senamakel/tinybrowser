@@ -217,9 +217,24 @@ pub(crate) async fn launch(
     profile: Option<&str>,
     extra_args: &[String],
 ) -> Result<LaunchedBrowser> {
+    launch_within(executable, headless, profile, extra_args, STARTUP_TIMEOUT).await
+}
+
+/// [`launch`] with the startup deadline supplied.
+///
+/// Split out for the tests: the failure worth checking is a browser that starts
+/// and then never says anything, and waiting the real twenty seconds to check it
+/// would put a twenty-second pause in the suite.
+async fn launch_within(
+    executable: &std::path::Path,
+    headless: bool,
+    profile: Option<&str>,
+    extra_args: &[String],
+    startup: Duration,
+) -> Result<LaunchedBrowser> {
     let (profile_dir, owned) = match profile {
         Some(path) => (PathBuf::from(path), false),
-        None => (temporary_profile()?, true),
+        None => (profile_in(&std::env::temp_dir())?, true),
     };
 
     let mut command = Command::new(executable);
@@ -356,9 +371,14 @@ pub(crate) fn environment_args() -> Vec<String> {
         .collect()
 }
 
-/// A private profile directory for one launched browser.
-fn temporary_profile() -> Result<PathBuf> {
-    let path = std::env::temp_dir().join(format!("tinybrowser-{}", uuid::Uuid::new_v4()));
+/// A private profile directory for one launched browser, created under `base`.
+///
+/// `base` is a parameter rather than a call to `std::env::temp_dir` inside so a
+/// test can hand it somewhere unwritable: a module that reports "could not
+/// create a profile directory" instead of launching is a module an operator can
+/// diagnose, and that message is only reachable when the creation fails.
+pub(crate) fn profile_in(base: &std::path::Path) -> Result<PathBuf> {
+    let path = base.join(format!("tinybrowser-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&path).map_err(|error| {
         Error::browser_unavailable(format!(
             "creating profile directory {}: {error}",
