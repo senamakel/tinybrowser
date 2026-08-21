@@ -56,7 +56,7 @@ const NETWORK_IDLE_GRACE: Duration = Duration::from_secs(2);
 /// the browser handles the input event and commits — so this only has to be long
 /// enough to see it begin. Most clicks start nothing at all and pay the whole
 /// period for nothing, which is why it is this short rather than generous.
-const INPUT_NAVIGATION_GRACE: Duration = Duration::from_millis(300);
+const INPUT_NAVIGATION_GRACE: Duration = Duration::from_millis(3000);
 
 /// How often to ask the page what it is doing while waiting for it to settle.
 const READY_POLL: Duration = Duration::from_millis(25);
@@ -335,6 +335,9 @@ impl Session {
                 Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
             };
 
+            if event.session_id.as_deref() == Some(self.page.as_str()) {
+                eprintln!("DIAGEV {}", event.method);
+            }
             if event.session_id.as_deref() == Some(self.page.as_str())
                 && STARTED.contains(&event.method.as_str())
             {
