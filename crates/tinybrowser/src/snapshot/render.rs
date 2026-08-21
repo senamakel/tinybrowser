@@ -168,7 +168,11 @@ impl<'a> Walk<'a> {
         if !self.visited.insert(node.node_id.as_str()) {
             return;
         }
-        if self.request.depth.is_some_and(|limit| depth > limit as usize) {
+        if self
+            .request
+            .depth
+            .is_some_and(|limit| depth > limit as usize)
+        {
             return;
         }
 
@@ -181,7 +185,8 @@ impl<'a> Walk<'a> {
 
         if emit {
             let reference = self.mint(node);
-            self.lines.push(self.line(node, depth, reference.as_deref()));
+            self.lines
+                .push(self.line(node, depth, reference.as_deref()));
         }
 
         for child_id in &node.child_ids {
@@ -269,9 +274,10 @@ impl<'a> Walk<'a> {
 
         if self.request.include_urls
             && let Some(url) = node.property("url").map(|value| clean(&value.as_text()))
-                && !url.is_empty() {
-                    line.push_str(&format!(" url=\"{url}\""));
-                }
+            && !url.is_empty()
+        {
+            line.push_str(&format!(" url=\"{url}\""));
+        }
 
         if let Some(reference) = reference {
             line.push_str(&format!(" @{reference}"));
@@ -304,9 +310,7 @@ impl AxValueExt for super::types::AxValue {
 /// of zero-width joiners, non-breaking spaces, and newlines from the markup. An
 /// agent comparing "Add to cart" against `Add\u{00A0}to cart` finds nothing.
 pub(crate) fn clean(raw: &str) -> String {
-    const INVISIBLE: &[char] = &[
-        '\u{FEFF}', '\u{200B}', '\u{200C}', '\u{200D}', '\u{2060}',
-    ];
+    const INVISIBLE: &[char] = &['\u{FEFF}', '\u{200B}', '\u{200C}', '\u{200D}', '\u{2060}'];
 
     raw.chars()
         .map(|character| {

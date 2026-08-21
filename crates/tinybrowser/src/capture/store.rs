@@ -125,9 +125,10 @@ impl OutputStore {
     pub(crate) fn read(&mut self, id: &OutputId, offset: u64, len: u64) -> Result<OutputChunk> {
         self.expire();
 
-        let held = self.held.get(id).ok_or_else(|| Error::NoSuchOutput {
-            id: id.to_string(),
-        })?;
+        let held = self
+            .held
+            .get(id)
+            .ok_or_else(|| Error::NoSuchOutput { id: id.to_string() })?;
 
         let total = held.bytes.len() as u64;
         if offset > total {
@@ -136,7 +137,9 @@ impl OutputStore {
             )));
         }
 
-        let start = usize::try_from(offset).unwrap_or(usize::MAX).min(held.bytes.len());
+        let start = usize::try_from(offset)
+            .unwrap_or(usize::MAX)
+            .min(held.bytes.len());
         let take = usize::try_from(len.clamp(1, MAX_CHUNK)).unwrap_or(0);
         let end = start.saturating_add(take).min(held.bytes.len());
 

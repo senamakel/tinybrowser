@@ -30,11 +30,12 @@ pub(crate) async fn screenshot(
     store: &tokio::sync::Mutex<OutputStore>,
 ) -> Result<OutputRef> {
     if let Some(quality) = request.quality
-        && !(1..=100).contains(&quality) {
-            return Err(Error::invalid_input(format!(
-                "quality {quality} is outside 1-100"
-            )));
-        }
+        && !(1..=100).contains(&quality)
+    {
+        return Err(Error::invalid_input(format!(
+            "quality {quality} is outside 1-100"
+        )));
+    }
 
     let format = match request.format {
         ImageFormat::Png => "png",

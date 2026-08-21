@@ -45,16 +45,18 @@ pub(crate) async fn selector_node(session: &Session, selector: &str) -> Result<i
         serde_json::to_string(selector).unwrap_or_else(|_| "null".to_string())
     );
 
-    let object = evaluate_to_object(session, &expression).await.map_err(|error| {
-        // An invalid selector throws `SyntaxError` inside the page. Reported as
-        // a page error it looks like the site's fault; reported as invalid input
-        // it says what it is, which is that the caller wrote a bad selector.
-        if error.to_string().contains("SyntaxError") {
-            Error::invalid_input(format!("{selector} is not a valid css selector"))
-        } else {
-            error
-        }
-    })?;
+    let object = evaluate_to_object(session, &expression)
+        .await
+        .map_err(|error| {
+            // An invalid selector throws `SyntaxError` inside the page. Reported as
+            // a page error it looks like the site's fault; reported as invalid input
+            // it says what it is, which is that the caller wrote a bad selector.
+            if error.to_string().contains("SyntaxError") {
+                Error::invalid_input(format!("{selector} is not a valid css selector"))
+            } else {
+                error
+            }
+        })?;
 
     match object {
         Some(object_id) => describe(session, &object_id).await,

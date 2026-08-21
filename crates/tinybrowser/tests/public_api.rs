@@ -13,8 +13,8 @@
 
 use tinybrowser::{
     Action, Browser, Error, EvaluateRequest, LocateBy, Locator, NavigateRequest, OutputId,
-    ReadFormat, ReadRequest, ScreenshotRequest, SessionId, SessionOptions, SnapshotRequest,
-    Target, WaitUntil, errors, is_compatible, names,
+    ReadFormat, ReadRequest, ScreenshotRequest, SessionId, SessionOptions, SnapshotRequest, Target,
+    WaitUntil, errors, is_compatible, names,
 };
 
 #[test]

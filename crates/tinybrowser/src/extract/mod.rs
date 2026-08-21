@@ -79,8 +79,12 @@ async fn html(
     selector: Option<&str>,
     deadline: std::time::Duration,
 ) -> Result<String> {
-    let node = if let Some(selector) = selector { super::interact::resolve::selector_node(session, selector).await? } else {
-        let document = session.send("DOM.getDocument", json!({ "depth": 0 })).await?;
+    let node = if let Some(selector) = selector {
+        super::interact::resolve::selector_node(session, selector).await?
+    } else {
+        let document = session
+            .send("DOM.getDocument", json!({ "depth": 0 }))
+            .await?;
         document
             .get("root")
             .and_then(|root| root.get("backendNodeId"))

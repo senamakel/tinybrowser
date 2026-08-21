@@ -86,10 +86,7 @@ fn messages_are_lowercase_and_unpunctuated() {
             !first.is_uppercase(),
             "{rendered} starts with a capital letter"
         );
-        assert!(
-            !rendered.ends_with('.'),
-            "{rendered} ends with a full stop"
-        );
+        assert!(!rendered.ends_with('.'), "{rendered} ends with a full stop");
     }
 }
 

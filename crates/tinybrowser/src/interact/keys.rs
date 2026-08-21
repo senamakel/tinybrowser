@@ -108,9 +108,7 @@ pub(crate) fn parse(chord: &str) -> Result<KeyStroke> {
     }
 
     let lowered = key.to_ascii_lowercase();
-    if let Some((_, key, code, key_code, text)) =
-        NAMED.iter().find(|(name, ..)| *name == lowered)
-    {
+    if let Some((_, key, code, key_code, text)) = NAMED.iter().find(|(name, ..)| *name == lowered) {
         return Ok(KeyStroke {
             modifiers: mask,
             key: (*key).to_string(),

@@ -58,6 +58,9 @@ fn every_member_constant_appears_in_methods() {
         methods::RELEASE_OUTPUT,
         methods::CONTRACT_VERSION,
     ] {
-        assert!(METHODS.contains(&member), "{member} is missing from METHODS");
+        assert!(
+            METHODS.contains(&member),
+            "{member} is missing from METHODS"
+        );
     }
 }

@@ -227,22 +227,22 @@ pub(crate) async fn launch(
         ));
     };
 
-    let websocket_url = match tokio::time::timeout(STARTUP_TIMEOUT, read_websocket_url(stderr)).await
-    {
-        Ok(Ok(url)) => url,
-        Ok(Err(error)) => {
-            let _ = child.kill().await;
-            return Err(error);
-        }
-        Err(_) => {
-            let _ = child.kill().await;
-            return Err(Error::browser_unavailable(format!(
-                "{} did not report a devtools url within {}s",
-                executable.display(),
-                STARTUP_TIMEOUT.as_secs()
-            )));
-        }
-    };
+    let websocket_url =
+        match tokio::time::timeout(STARTUP_TIMEOUT, read_websocket_url(stderr)).await {
+            Ok(Ok(url)) => url,
+            Ok(Err(error)) => {
+                let _ = child.kill().await;
+                return Err(error);
+            }
+            Err(_) => {
+                let _ = child.kill().await;
+                return Err(Error::browser_unavailable(format!(
+                    "{} did not report a devtools url within {}s",
+                    executable.display(),
+                    STARTUP_TIMEOUT.as_secs()
+                )));
+            }
+        };
 
     Ok(LaunchedBrowser {
         websocket_url,

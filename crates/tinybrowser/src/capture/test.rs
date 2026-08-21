@@ -43,8 +43,12 @@ fn a_stored_output_reports_its_size_and_digest() {
 #[test]
 fn every_output_gets_a_distinct_identity() {
     let mut store = OutputStore::default();
-    let first = store.insert(b"a".to_vec(), "image/png", 1, 1).expect("stored");
-    let second = store.insert(b"a".to_vec(), "image/png", 1, 1).expect("stored");
+    let first = store
+        .insert(b"a".to_vec(), "image/png", 1, 1)
+        .expect("stored");
+    let second = store
+        .insert(b"a".to_vec(), "image/png", 1, 1)
+        .expect("stored");
 
     assert_ne!(first.id, second.id);
 }
@@ -152,7 +156,9 @@ fn releasing_something_already_gone_succeeds() {
 fn the_store_evicts_the_oldest_rather_than_refusing_the_newest() {
     // The screenshot just taken is the one a caller is about to read.
     let mut store = OutputStore::default();
-    let first = store.insert(b"first".to_vec(), "image/png", 1, 1).expect("stored");
+    let first = store
+        .insert(b"first".to_vec(), "image/png", 1, 1)
+        .expect("stored");
 
     let mut newest = first.clone();
     for index in 0..32 {

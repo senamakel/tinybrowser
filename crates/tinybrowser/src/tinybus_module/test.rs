@@ -156,7 +156,11 @@ async fn reading_an_unknown_output_reports_it() -> tinybus::Result<()> {
     let result = proxy
         .call::<tinybrowser_bus::OutputChunk>(
             names::methods::READ_OUTPUT,
-            (tinybrowser_bus::OutputId::new("never-captured"), 0u64, 1024u64),
+            (
+                tinybrowser_bus::OutputId::new("never-captured"),
+                0u64,
+                1024u64,
+            ),
         )
         .await;
 

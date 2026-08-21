@@ -86,9 +86,8 @@ pub(crate) struct CdpClient {
     keepalive: std::sync::OnceLock<tokio::task::JoinHandle<()>>,
 }
 
-type Socket = tokio_tungstenite::WebSocketStream<
-    tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
->;
+type Socket =
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 type Sink = futures_util::stream::SplitSink<Socket, Message>;
 
 impl Drop for CdpClient {
@@ -145,12 +144,11 @@ impl CdpClient {
             ..Default::default()
         };
 
-        let (socket, _) =
-            tokio_tungstenite::connect_async_with_config(url, Some(config), false)
-                .await
-                .map_err(|error| {
-                    Error::browser_unavailable(format!("cdp connect to {url} failed: {error}"))
-                })?;
+        let (socket, _) = tokio_tungstenite::connect_async_with_config(url, Some(config), false)
+            .await
+            .map_err(|error| {
+                Error::browser_unavailable(format!("cdp connect to {url} failed: {error}"))
+            })?;
 
         let (sink, mut stream) = socket.split();
         let pending: Pending = Arc::new(Mutex::new(HashMap::new()));

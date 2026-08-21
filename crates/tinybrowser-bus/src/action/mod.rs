@@ -21,9 +21,7 @@
 
 mod types;
 
-pub use types::{
-    Action, ActionOutcome, LocateBy, Locator, ScrollDirection, Target, WaitState,
-};
+pub use types::{Action, ActionOutcome, LocateBy, Locator, ScrollDirection, Target, WaitState};
 
 #[cfg(test)]
 mod test;

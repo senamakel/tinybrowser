@@ -139,8 +139,7 @@ impl Browser {
     /// still be read rather than omitted, because "it is gone" is the answer a
     /// caller listing sessions most needs.
     pub async fn list_sessions(&self) -> Vec<SessionInfo> {
-        let sessions: Vec<Arc<Session>> =
-            self.sessions.read().await.values().cloned().collect();
+        let sessions: Vec<Arc<Session>> = self.sessions.read().await.values().cloned().collect();
 
         let mut infos = Vec::with_capacity(sessions.len());
         for session in sessions {
@@ -168,11 +167,7 @@ impl Browser {
     ///
     /// [`Error::NoSuchSession`], plus anything
     /// [`Session::navigate`](crate::session::Session::navigate) reports.
-    pub async fn navigate(
-        &self,
-        id: &SessionId,
-        request: &NavigateRequest,
-    ) -> Result<PageState> {
+    pub async fn navigate(&self, id: &SessionId, request: &NavigateRequest) -> Result<PageState> {
         self.session(id).await?.navigate(request).await
     }
 
@@ -248,12 +243,7 @@ impl Browser {
     ///
     /// [`Error::NoSuchOutput`] when it is unknown or expired, and
     /// [`Error::InvalidInput`] when `offset` is past its end.
-    pub async fn read_output(
-        &self,
-        id: &OutputId,
-        offset: u64,
-        len: u64,
-    ) -> Result<OutputChunk> {
+    pub async fn read_output(&self, id: &OutputId, offset: u64, len: u64) -> Result<OutputChunk> {
         self.outputs.lock().await.read(id, offset, len)
     }
 
@@ -272,8 +262,13 @@ impl Browser {
     /// A module is unloaded by the process ending, so this is what stops a
     /// launched browser outliving the host that asked for it.
     pub async fn shutdown(&self) {
-        let sessions: Vec<Arc<Session>> =
-            self.sessions.write().await.drain().map(|(_, s)| s).collect();
+        let sessions: Vec<Arc<Session>> = self
+            .sessions
+            .write()
+            .await
+            .drain()
+            .map(|(_, s)| s)
+            .collect();
 
         for session in sessions {
             session.close().await;

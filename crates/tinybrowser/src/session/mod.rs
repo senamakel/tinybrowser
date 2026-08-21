@@ -77,7 +77,9 @@ impl Session {
     /// reached, and [`Error::PageError`] when the browser rejects the setup
     /// commands.
     pub(crate) async fn open(id: SessionId, options: SessionOptions) -> Result<Self> {
-        let (endpoint, launched) = if let Some(configured) = options.endpoint.as_deref() { (endpoint::resolve(configured).await?, None) } else {
+        let (endpoint, launched) = if let Some(configured) = options.endpoint.as_deref() {
+            (endpoint::resolve(configured).await?, None)
+        } else {
             let executable = launch::find_executable(options.executable.as_deref())?;
             let browser = launch::launch(
                 &executable,
@@ -140,11 +142,8 @@ impl Session {
         // Lifecycle events are what a navigation waits on. Without this, `load`
         // and `networkIdle` never arrive and every navigation settles at its
         // deadline instead.
-        self.send(
-            "Page.setLifecycleEventsEnabled",
-            json!({ "enabled": true }),
-        )
-        .await?;
+        self.send("Page.setLifecycleEventsEnabled", json!({ "enabled": true }))
+            .await?;
 
         let viewport = self.options.viewport;
         self.send(
@@ -401,9 +400,14 @@ impl Session {
         // A ref names a node in the document that has just been replaced. The
         // snapshot counter moves on so every outstanding ref reports as stale
         // rather than resolving against the new page.
-        self.refs.lock().await.replace(std::collections::HashMap::new());
+        self.refs
+            .lock()
+            .await
+            .replace(std::collections::HashMap::new());
 
-        let status = self.settle(events, &frame, request.wait_until, deadline).await?;
+        let status = self
+            .settle(events, &frame, request.wait_until, deadline)
+            .await?;
 
         let mut page = self.page_state().await?;
         page.status = status;

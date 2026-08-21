@@ -72,7 +72,11 @@ fn nodes(value: serde_json::Value) -> Vec<AxNode> {
 fn a_tree_renders_as_indented_roles_and_names() {
     let rendered = render(&page(), &SnapshotRequest::default());
 
-    assert!(rendered.tree.starts_with("- RootWebArea \"Example Domain\""));
+    assert!(
+        rendered
+            .tree
+            .starts_with("- RootWebArea \"Example Domain\"")
+    );
     assert!(rendered.tree.contains("\n  - heading \"Example Domain\""));
     assert!(rendered.tree.contains("\n  - link \"More information\""));
 }

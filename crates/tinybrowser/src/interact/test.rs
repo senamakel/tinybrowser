@@ -30,7 +30,10 @@ fn a_named_key_carries_all_four_values() {
 
 #[test]
 fn key_names_are_matched_case_insensitively() {
-    assert_eq!(parse("enter").expect("parses"), parse("Enter").expect("parses"));
+    assert_eq!(
+        parse("enter").expect("parses"),
+        parse("Enter").expect("parses")
+    );
     assert_eq!(parse("ESCAPE").expect("parses").key, "Escape");
 }
 

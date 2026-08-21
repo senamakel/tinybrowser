@@ -26,7 +26,9 @@ fn a_bare_host_becomes_https() {
         "https://example.com/"
     );
     assert_eq!(
-        normalize_url("localhost:3000").expect("normalizes").as_str(),
+        normalize_url("localhost:3000")
+            .expect("normalizes")
+            .as_str(),
         "https://localhost:3000/"
     );
 }
@@ -95,9 +97,19 @@ fn a_dotted_entry_matches_the_host_and_its_subdomains() {
     let allowed = vec![".example.com".to_string()];
 
     assert!(check_allowed(&normalize_url("https://example.com/").unwrap(), &allowed).is_ok());
-    assert!(check_allowed(&normalize_url("https://docs.example.com/").unwrap(), &allowed).is_ok());
     assert!(
-        check_allowed(&normalize_url("https://a.b.example.com/").unwrap(), &allowed).is_ok()
+        check_allowed(
+            &normalize_url("https://docs.example.com/").unwrap(),
+            &allowed
+        )
+        .is_ok()
+    );
+    assert!(
+        check_allowed(
+            &normalize_url("https://a.b.example.com/").unwrap(),
+            &allowed
+        )
+        .is_ok()
     );
 }
 
@@ -129,7 +141,10 @@ fn a_ref_from_no_snapshot_at_all_is_stale() {
     let map = RefMap::default();
 
     let error = map.resolve("e1").expect_err("refused");
-    assert!(matches!(error, Error::StaleRef { current: 0, .. }), "{error}");
+    assert!(
+        matches!(error, Error::StaleRef { current: 0, .. }),
+        "{error}"
+    );
 }
 
 #[test]
@@ -153,7 +168,10 @@ fn a_new_snapshot_retires_the_previous_refs() {
     assert_eq!(map.resolve("e1").expect("resolves"), 99);
 
     let error = map.resolve("e2").expect_err("refused");
-    assert!(matches!(error, Error::StaleRef { current: 2, .. }), "{error}");
+    assert!(
+        matches!(error, Error::StaleRef { current: 2, .. }),
+        "{error}"
+    );
 }
 
 #[test]

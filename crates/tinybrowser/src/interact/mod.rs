@@ -109,8 +109,7 @@ pub(crate) async fn perform(session: &Session, action: &Action) -> Result<Action
             read(session, target, text).await
         }
         Action::GetAttribute { target, attribute } => {
-            let value =
-                on_node(session, target, script::ATTRIBUTE, vec![json!(attribute)]).await?;
+            let value = on_node(session, target, script::ATTRIBUTE, vec![json!(attribute)]).await?;
             read(session, target, value).await
         }
         Action::IsVisible { target } => {
@@ -258,7 +257,12 @@ async fn click(session: &Session, target: &Target, new_tab: bool, count: u32) ->
 async fn click_point(session: &Session, target: &Target) -> Result<(f64, f64)> {
     let node = resolve::resolve(session, target).await?;
     let point = session
-        .call_on_node(node, script::CLICK_POINT, Vec::new(), session.deadline(None))
+        .call_on_node(
+            node,
+            script::CLICK_POINT,
+            Vec::new(),
+            session.deadline(None),
+        )
         .await?;
 
     if point.get("ok").and_then(Value::as_bool) != Some(true) {
@@ -289,7 +293,9 @@ async fn click_point(session: &Session, target: &Target) -> Result<(f64, f64)> {
 async fn fill(session: &Session, target: &Target, value: &str) -> Result<()> {
     let node = resolve::resolve(session, target).await?;
 
-    session.send("DOM.focus", json!({ "backendNodeId": node })).await?;
+    session
+        .send("DOM.focus", json!({ "backendNodeId": node }))
+        .await?;
     session
         .call_on_node(node, script::SELECT_ALL, Vec::new(), session.deadline(None))
         .await?;
@@ -342,9 +348,10 @@ async fn press(session: &Session, chord: &str) -> Result<()> {
 
         // `text` on a keyUp would insert the character a second time.
         if kind == "keyDown"
-            && let Some(text) = &stroke.text {
-                params["text"] = json!(text);
-            }
+            && let Some(text) = &stroke.text
+        {
+            params["text"] = json!(text);
+        }
 
         session.send("Input.dispatchKeyEvent", params).await?;
     }

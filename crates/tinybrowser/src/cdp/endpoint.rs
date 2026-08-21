@@ -58,9 +58,7 @@ pub(crate) async fn resolve(endpoint: &str) -> Result<String> {
         .get(format!("{endpoint}/json/version"))
         .send()
         .await
-        .map_err(|error| {
-            Error::browser_unavailable(format!("{endpoint}/json/version: {error}"))
-        })?
+        .map_err(|error| Error::browser_unavailable(format!("{endpoint}/json/version: {error}")))?
         .json()
         .await
         .map_err(|error| {

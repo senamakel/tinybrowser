@@ -4,8 +4,8 @@
 
 use super::{
     BLOCKED_BY_POLICY, BROWSER_UNAVAILABLE, INVALID_INPUT, LIMIT_EXCEEDED, MODULE_FAILED, NAMES,
-    NOT_ACTIONABLE, NO_SUCH_ELEMENT, NO_SUCH_OUTPUT, NO_SUCH_SESSION, PAGE_ERROR, PREFIX, STALE_REF,
-    TIMEOUT, is_agent_recoverable,
+    NO_SUCH_ELEMENT, NO_SUCH_OUTPUT, NO_SUCH_SESSION, NOT_ACTIONABLE, PAGE_ERROR, PREFIX,
+    STALE_REF, TIMEOUT, is_agent_recoverable,
 };
 
 #[test]
@@ -65,5 +65,7 @@ fn an_unknown_name_is_not_recoverable() {
     // A module from a newer contract can send a name this build has never seen.
     // Treating it as recoverable would have an agent retry something it cannot
     // understand; treating it as an operator problem surfaces it instead.
-    assert!(!is_agent_recoverable("ai.tinyhumans.tinybrowser.Error.Invented"));
+    assert!(!is_agent_recoverable(
+        "ai.tinyhumans.tinybrowser.Error.Invented"
+    ));
 }

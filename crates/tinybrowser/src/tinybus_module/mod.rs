@@ -49,12 +49,18 @@ struct BrowserService;
 impl BrowserService {
     /// Launches or attaches a browser and returns the session that owns it.
     async fn open_session(&self, options: SessionOptions) -> BusResult<SessionInfo> {
-        engine().open_session(options).await.map_err(|error| to_bus(&error))
+        engine()
+            .open_session(options)
+            .await
+            .map_err(|error| to_bus(&error))
     }
 
     /// Closes a session and everything it owns.
     async fn close_session(&self, id: SessionId) -> BusResult<()> {
-        engine().close_session(&id).await.map_err(|error| to_bus(&error))
+        engine()
+            .close_session(&id)
+            .await
+            .map_err(|error| to_bus(&error))
     }
 
     /// Lists the sessions this module is holding open.
@@ -64,22 +70,34 @@ impl BrowserService {
 
     /// Navigates a session's active page.
     async fn navigate(&self, id: SessionId, request: NavigateRequest) -> BusResult<PageState> {
-        engine().navigate(&id, &request).await.map_err(|error| to_bus(&error))
+        engine()
+            .navigate(&id, &request)
+            .await
+            .map_err(|error| to_bus(&error))
     }
 
     /// Captures the accessibility tree of a session's active page.
     async fn snapshot(&self, id: SessionId, request: SnapshotRequest) -> BusResult<Snapshot> {
-        engine().snapshot(&id, &request).await.map_err(|error| to_bus(&error))
+        engine()
+            .snapshot(&id, &request)
+            .await
+            .map_err(|error| to_bus(&error))
     }
 
     /// Performs one interaction against a session's active page.
     async fn perform(&self, id: SessionId, action: Action) -> BusResult<ActionOutcome> {
-        engine().perform(&id, &action).await.map_err(|error| to_bus(&error))
+        engine()
+            .perform(&id, &action)
+            .await
+            .map_err(|error| to_bus(&error))
     }
 
     /// Extracts a session's active page as agent-readable text.
     async fn read_page(&self, id: SessionId, request: ReadRequest) -> BusResult<PageText> {
-        engine().read_page(&id, &request).await.map_err(|error| to_bus(&error))
+        engine()
+            .read_page(&id, &request)
+            .await
+            .map_err(|error| to_bus(&error))
     }
 
     /// Evaluates JavaScript in a session's active page.
@@ -88,26 +106,34 @@ impl BrowserService {
         id: SessionId,
         request: EvaluateRequest,
     ) -> BusResult<serde_json::Value> {
-        engine().evaluate(&id, &request).await.map_err(|error| to_bus(&error))
+        engine()
+            .evaluate(&id, &request)
+            .await
+            .map_err(|error| to_bus(&error))
     }
 
     /// Captures a screenshot and holds it for collection.
-    async fn screenshot(
-        &self,
-        id: SessionId,
-        request: ScreenshotRequest,
-    ) -> BusResult<OutputRef> {
-        engine().screenshot(&id, &request).await.map_err(|error| to_bus(&error))
+    async fn screenshot(&self, id: SessionId, request: ScreenshotRequest) -> BusResult<OutputRef> {
+        engine()
+            .screenshot(&id, &request)
+            .await
+            .map_err(|error| to_bus(&error))
     }
 
     /// Reads one chunk of a held output.
     async fn read_output(&self, id: OutputId, offset: u64, len: u64) -> BusResult<OutputChunk> {
-        engine().read_output(&id, offset, len).await.map_err(|error| to_bus(&error))
+        engine()
+            .read_output(&id, offset, len)
+            .await
+            .map_err(|error| to_bus(&error))
     }
 
     /// Releases a held output before it expires.
     async fn release_output(&self, id: OutputId) -> BusResult<()> {
-        engine().release_output(&id).await.map_err(|error| to_bus(&error))
+        engine()
+            .release_output(&id)
+            .await
+            .map_err(|error| to_bus(&error))
     }
 
     /// Reports the contract version this module serves.
