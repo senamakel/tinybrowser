@@ -92,6 +92,22 @@ pub(crate) async fn screenshot(
         .and_then(Value::as_str)
         .ok_or_else(|| Error::page("browser captured no image data".to_string()))?;
 
+    // Checked before decoding, not after. `OutputStore::insert` rejects an image
+    // larger than it will hold, but by then the decode has already allocated it:
+    // the CDP frame is unbounded by design — a full-page capture legitimately
+    // exceeds any frame cap worth setting — so the first place the size is known
+    // is the length of the encoded text, and the first place it can be refused
+    // without paying for it is here. Base64 carries three bytes in four.
+    let decoded_len = encoded.len() / 4 * 3;
+    if decoded_len > store::MAX_OUTPUT_BYTES {
+        return Err(Error::LimitExceeded {
+            message: format!(
+                "screenshot of about {decoded_len} bytes exceeds the {} byte cap",
+                store::MAX_OUTPUT_BYTES
+            ),
+        });
+    }
+
     let bytes = BASE64
         .decode(encoded)
         .map_err(|error| Error::page(format!("screenshot was not valid base64: {error}")))?;

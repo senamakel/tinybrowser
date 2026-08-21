@@ -30,7 +30,7 @@ const MAX_OUTPUTS: usize = 16;
 ///
 /// A full-page capture of a long article at 2x lands in the low megabytes; this
 /// is several times that and still far below what would matter to a host.
-const MAX_OUTPUT_BYTES: usize = 64 * 1024 * 1024;
+pub(crate) const MAX_OUTPUT_BYTES: usize = 64 * 1024 * 1024;
 
 /// How long an uncollected output survives.
 const TTL: Duration = Duration::from_secs(300);
