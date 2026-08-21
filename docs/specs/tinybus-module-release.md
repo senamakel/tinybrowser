@@ -10,10 +10,11 @@ distributable without also shipping the TinyBus host runtime.
 - The library builds as both an `rlib` and a native `cdylib`.
 - The `cdylib` exports TinyBus module ABI v1, an embedded manifest, and the
   initialization entrypoint.
-- The example module provides `ai.tinyhumans.template.Greeting.Greet` at
-  `/ai/tinyhumans/template/Greeting`.
+- The module provides `ai.tinyhumans.tinybrowser.Browser` at
+  `/ai/tinyhumans/tinybrowser/Browser`, with the members
+  `tinybrowser_bus::names::METHODS` lists.
 - Each release archive is named
-  `template-<version>-<platform>.<extension>` and contains only this
+  `tinybrowser-<version>-<platform>.<extension>` and contains only this
   module, its SHA-256 `modules.toml`, license, and installation documentation.
 - Each GitHub release publishes a separate `checksum.toml` mapping every
   archive filename to its SHA-256 digest for TinyBus's release loader.

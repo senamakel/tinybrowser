@@ -28,10 +28,15 @@ docs/
 Complex modules also carry a module-level `README.md` inside `src/<module>/`
 covering their design, public surface, and important constraints.
 
-The current module-release contract is in
-[`specs/tinybus-module-release.md`](specs/tinybus-module-release.md), with its
-implementation sequence in
-[`plans/tinybus-module-release.md`](plans/tinybus-module-release.md).
+The current documents:
+
+- [`specs/browser-module.md`](specs/browser-module.md) — what the module does,
+  what it refuses to do, and the invariants a change must not break.
+- [`specs/tinybus-module-release.md`](specs/tinybus-module-release.md) and
+  [`plans/tinybus-module-release.md`](plans/tinybus-module-release.md) — the
+  module-release contract and its implementation sequence.
+- [`openhuman-integration.md`](openhuman-integration.md) — the host side: what
+  an OpenHuman build adds to make this available to an agent.
 
 ## Conventions
 
