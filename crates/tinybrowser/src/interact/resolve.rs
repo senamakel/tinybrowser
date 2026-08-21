@@ -7,6 +7,10 @@
 //! re-queries between measuring the element and dispatching at it can measure
 //! one element and click another.
 
+// Writing into a `String` cannot fail, so every `write!` below discards its
+// result rather than propagating an error that does not exist.
+use std::fmt::Write as _;
+
 use serde_json::{Value, json};
 use tinybrowser_bus::{LocateBy, Locator, Target};
 
@@ -188,10 +192,10 @@ pub(crate) fn dimension(by: LocateBy) -> &'static str {
 pub(crate) fn describe_locator(locator: &Locator) -> String {
     let mut rendered = format!("{} {:?}", dimension(locator.by), locator.value);
     if let Some(name) = &locator.name {
-        rendered.push_str(&format!(" named {name:?}"));
+        let _ = write!(rendered, " named {name:?}");
     }
     if locator.index > 0 {
-        rendered.push_str(&format!(" at index {}", locator.index));
+        let _ = write!(rendered, " at index {}", locator.index);
     }
     rendered
 }

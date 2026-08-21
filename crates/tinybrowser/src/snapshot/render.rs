@@ -24,6 +24,10 @@
 //! reads it as a list, and nothing downstream should be tempted to parse it when
 //! [`tinybrowser_bus::Snapshot::refs`] carries the same information structurally.
 
+// Writing into a `String` cannot fail, so every `write!` below discards its
+// result rather than propagating an error that does not exist.
+use std::fmt::Write as _;
+
 use std::collections::HashMap;
 
 use tinybrowser_bus::{ElementRef, SnapshotRequest};
@@ -246,19 +250,19 @@ impl<'a> Walk<'a> {
 
         let name = clean(&node.name.as_text());
         if !name.is_empty() {
-            line.push_str(&format!(" \"{name}\""));
+            let _ = write!(line, " \"{name}\"");
         }
 
         let value = clean(&node.value.as_text());
         if !value.is_empty() && value != name {
-            line.push_str(&format!(" value=\"{value}\""));
+            let _ = write!(line, " value=\"{value}\"");
         }
 
         for (property, label) in [("checked", "checked"), ("expanded", "expanded")] {
             if let Some(state) = node.property(property) {
                 let rendered = state.as_text();
                 if !rendered.is_empty() && rendered != "false" {
-                    line.push_str(&format!(" {label}={rendered}"));
+                    let _ = write!(line, " {label}={rendered}");
                 }
             }
         }
@@ -268,7 +272,7 @@ impl<'a> Walk<'a> {
         // size of the tree to say nothing.
         for property in ["disabled", "required", "selected"] {
             if node.property(property).and_then(AxValueExt::truthy) == Some(true) {
-                line.push_str(&format!(" {property}"));
+                let _ = write!(line, " {property}");
             }
         }
 
@@ -276,11 +280,11 @@ impl<'a> Walk<'a> {
             && let Some(url) = node.property("url").map(|value| clean(&value.as_text()))
             && !url.is_empty()
         {
-            line.push_str(&format!(" url=\"{url}\""));
+            let _ = write!(line, " url=\"{url}\"");
         }
 
         if let Some(reference) = reference {
-            line.push_str(&format!(" @{reference}"));
+            let _ = write!(line, " @{reference}");
         }
 
         line
