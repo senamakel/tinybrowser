@@ -137,6 +137,14 @@ pub(crate) struct LaunchedBrowser {
     pub(crate) websocket_url: String,
     child: Child,
     profile: Option<PathBuf>,
+    /// Keeps reading the browser's stderr for as long as it runs.
+    ///
+    /// Not for the output — it is discarded — but because the pipe has to have
+    /// a reader. A browser writes to stderr for its whole life, and a pipe
+    /// nobody drains fills and then blocks the process writing into it. Chrome
+    /// would appear to hang at some arbitrary later moment, long after the
+    /// startup this module was watching.
+    drain: tokio::task::JoinHandle<()>,
 }
 
 impl LaunchedBrowser {
@@ -146,6 +154,7 @@ impl LaunchedBrowser {
     /// browser that has already exited or a directory already gone are both the
     /// outcome being asked for.
     pub(crate) async fn shutdown(mut self) {
+        self.drain.abort();
         let _ = self.child.kill().await;
         if let Some(profile) = self.profile.take() {
             let _ = tokio::fs::remove_dir_all(profile).await;
@@ -286,8 +295,10 @@ pub(crate) async fn launch_within(
         ));
     };
 
-    let websocket_url = match tokio::time::timeout(startup, read_websocket_url(stderr)).await {
-        Ok(Ok(url)) => url,
+    let (websocket_url, remaining) = match tokio::time::timeout(startup, read_websocket_url(stderr))
+        .await
+    {
+        Ok(Ok(found)) => found,
         Ok(Err(error)) => {
             let _ = child.kill().await;
             return Err(error);
@@ -306,6 +317,10 @@ pub(crate) async fn launch_within(
         websocket_url,
         child,
         profile: owned.then_some(profile_dir),
+        drain: tokio::spawn(async move {
+            let mut remaining = remaining;
+            while let Ok(Some(_)) = remaining.next_line().await {}
+        }),
     })
 }
 
@@ -314,7 +329,9 @@ pub(crate) async fn launch_within(
 /// When the browser dies instead, the banner is the only account of why, so the
 /// first few lines of it are kept and handed to [`diagnose`] rather than
 /// discarded in favour of "it did not start".
-async fn read_websocket_url(stderr: tokio::process::ChildStderr) -> Result<String> {
+type StderrLines = tokio::io::Lines<BufReader<tokio::process::ChildStderr>>;
+
+async fn read_websocket_url(stderr: tokio::process::ChildStderr) -> Result<(String, StderrLines)> {
     const MARKER: &str = "DevTools listening on ";
     /// Enough to hold the fatal line and its context, and few enough that a
     /// browser logging steadily cannot grow this without bound.
@@ -325,7 +342,9 @@ async fn read_websocket_url(stderr: tokio::process::ChildStderr) -> Result<Strin
 
     while let Ok(Some(line)) = lines.next_line().await {
         if let Some(url) = line.split_once(MARKER) {
-            return Ok(url.1.trim().to_string());
+            // The reader goes back to the caller rather than being dropped here:
+            // see the note on `LaunchedBrowser::drain`.
+            return Ok((url.1.trim().to_string(), lines));
         }
         if banner.len() < KEPT_LINES {
             banner.push(line);
