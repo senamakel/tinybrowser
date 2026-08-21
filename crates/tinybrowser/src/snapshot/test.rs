@@ -128,15 +128,18 @@ fn interactive_only_keeps_the_controls_and_drops_the_prose() {
 }
 
 #[test]
-fn compact_drops_unnamed_containers() {
+fn compact_drops_the_structural_scaffolding() {
     let request = SnapshotRequest {
         compact: true,
         ..SnapshotRequest::default()
     };
     let rendered = render(&page(), &request);
 
+    // Dropped even though it is named: the wrapper tells an agent nothing the
+    // items inside it do not.
     assert!(!rendered.tree.contains("RootWebArea"));
     assert!(rendered.tree.contains("- heading \"Example Domain\""));
+    assert!(rendered.tree.contains("- link \"More information\""));
 }
 
 #[test]

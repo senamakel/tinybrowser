@@ -70,8 +70,8 @@ const CONTENT_ROLES: &[&str] = &[
     "StaticText",
 ];
 
-/// Roles that exist to hold other nodes. `compact` collapses the ones with no
-/// name of their own.
+/// Roles that exist to hold other nodes. `compact` drops them, keeping their
+/// children at the parent's depth.
 const STRUCTURAL_ROLES: &[&str] = &[
     "application",
     "directory",
@@ -202,7 +202,10 @@ impl<'a> Walk<'a> {
             return false;
         }
 
-        if self.request.compact && is_structural(&role) && node.name.as_text().trim().is_empty() {
+        // `compact` drops the scaffolding even when it is named: a document, a
+        // list, or a table wrapper tells an agent nothing it cannot see from the
+        // items inside it, and on a real page they are most of the lines.
+        if self.request.compact && is_structural(&role) {
             return false;
         }
 

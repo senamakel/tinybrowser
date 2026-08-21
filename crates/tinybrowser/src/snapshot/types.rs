@@ -58,7 +58,12 @@ pub(crate) struct AxNode {
     /// The DOM node behind this one, absent for nodes with no element — a text
     /// run inside a paragraph, for instance. A node without one cannot be given
     /// a ref, because there is nothing to act on.
-    #[serde(default)]
+    ///
+    /// Named explicitly: `rename_all = "camelCase"` would spell this
+    /// `backendDomNodeId`, and Chrome sends `backendDOMNodeId`. The mismatch is
+    /// silent — the field simply arrives as `None` — so every node loses its
+    /// ref and a snapshot renders with nothing an agent can act on.
+    #[serde(default, rename = "backendDOMNodeId")]
     pub(crate) backend_dom_node_id: Option<i64>,
 }
 
