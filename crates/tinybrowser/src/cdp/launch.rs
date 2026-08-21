@@ -148,25 +148,42 @@ impl LaunchedBrowser {
 /// [`Error::BrowserUnavailable`] when neither the override nor any conventional
 /// path names an existing file.
 pub(crate) fn find_executable(configured: Option<&str>) -> Result<PathBuf> {
-    if let Some(path) = configured {
-        let path = PathBuf::from(path);
-        return if path.exists() {
-            Ok(path)
-        } else {
-            Err(Error::browser_unavailable(format!(
-                "configured browser {} does not exist",
-                path.display()
-            )))
-        };
-    }
+    resolve_executable(
+        configured,
+        std::env::var(EXECUTABLE_ENV).ok().as_deref(),
+        &|path: &std::path::Path| path.exists(),
+    )
+}
 
-    if let Ok(path) = std::env::var(EXECUTABLE_ENV) {
-        let path = PathBuf::from(path);
-        return if path.exists() {
+/// The decision behind [`find_executable`], with its two inputs and its one
+/// filesystem question passed in.
+///
+/// Split out so the precedence can be tested exhaustively: a test that set
+/// `TINYBROWSER_CHROME` to exercise the middle branch would race every other
+/// test in the process, and the branch that matters most — a configured path
+/// that does not exist must *fail* rather than fall through to whatever browser
+/// happens to be installed — is unreachable on a machine that has one.
+fn resolve_executable(
+    configured: Option<&str>,
+    from_env: Option<&str>,
+    exists: &dyn Fn(&std::path::Path) -> bool,
+) -> Result<PathBuf> {
+    // The two overrides are checked in order and neither falls through. Falling
+    // back on a typo would hide a host's misconfiguration behind a browser that
+    // works, which is the worst outcome for a setting whose whole purpose is to
+    // pin which binary runs.
+    for (source, candidate) in [
+        ("configured browser", configured),
+        (EXECUTABLE_ENV, from_env),
+    ] {
+        let Some(candidate) = candidate else { continue };
+        let path = PathBuf::from(candidate);
+
+        return if exists(&path) {
             Ok(path)
         } else {
             Err(Error::browser_unavailable(format!(
-                "{EXECUTABLE_ENV} points at {}, which does not exist",
+                "{source} {} does not exist",
                 path.display()
             )))
         };
@@ -175,7 +192,7 @@ pub(crate) fn find_executable(configured: Option<&str>) -> Result<PathBuf> {
     CANDIDATES
         .iter()
         .map(PathBuf::from)
-        .find(|path| path.exists())
+        .find(|path| exists(path))
         .ok_or_else(|| {
             Error::browser_unavailable(format!(
                 "no chrome or chromium found on this host; install one, or set {EXECUTABLE_ENV} \

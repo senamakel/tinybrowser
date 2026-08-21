@@ -11,6 +11,7 @@ use super::client::CdpClient;
 use super::endpoint::resolve;
 use super::launch::{
     ARGS_ENV, EXECUTABLE_ENV, diagnose, environment_args, find_executable, launch,
+    resolve_executable,
 };
 use crate::error::Error;
 
@@ -466,4 +467,91 @@ async fn events_reach_a_subscriber_and_carry_their_session() {
     // Nothing has emitted an event, so the receiver must be empty rather than
     // holding a misclassified reply.
     assert!(events.try_recv().is_err());
+}
+
+/// A filesystem in which exactly `present` exists.
+fn only(present: &'static str) -> impl Fn(&std::path::Path) -> bool {
+    move |path| path.to_string_lossy() == present
+}
+
+#[test]
+fn a_configured_path_wins_over_the_environment_and_the_conventional_ones() {
+    let found = resolve_executable(
+        Some("/opt/configured"),
+        Some("/opt/from-env"),
+        &|_: &std::path::Path| true,
+    )
+    .expect("found");
+
+    assert_eq!(found, std::path::PathBuf::from("/opt/configured"));
+}
+
+#[test]
+fn the_environment_wins_over_the_conventional_paths() {
+    let found = resolve_executable(None, Some("/opt/from-env"), &|_: &std::path::Path| true)
+        .expect("found");
+
+    assert_eq!(found, std::path::PathBuf::from("/opt/from-env"));
+}
+
+#[test]
+fn an_environment_path_that_does_not_exist_is_reported_not_fallen_back_from() {
+    // The branch that matters most, and the one that is unreachable on a
+    // machine that has a browser installed: a typo in a host's configuration
+    // must not be hidden behind a browser that happens to work.
+    let error = resolve_executable(None, Some("/opt/typo"), &only("/usr/bin/chromium"))
+        .expect_err("refused");
+
+    assert!(matches!(error, Error::BrowserUnavailable { .. }), "{error}");
+    assert!(error.to_string().contains("/opt/typo"), "{error}");
+    assert!(error.to_string().contains(EXECUTABLE_ENV), "{error}");
+}
+
+#[test]
+fn with_no_override_a_conventional_path_is_taken() {
+    let candidate = if cfg!(target_os = "linux") {
+        "/usr/bin/chromium"
+    } else if cfg!(target_os = "macos") {
+        "/Applications/Chromium.app/Contents/MacOS/Chromium"
+    } else {
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe"
+    };
+
+    let found = resolve_executable(None, None, &only(candidate)).expect("found");
+    assert_eq!(found, std::path::PathBuf::from(candidate));
+}
+
+#[test]
+fn a_host_with_no_browser_is_told_all_three_ways_out() {
+    // This message is the only place the module can tell an operator what to do
+    // about a machine with no browser on it.
+    let error = resolve_executable(None, None, &|_: &std::path::Path| false).expect_err("refused");
+
+    let message = error.to_string();
+    assert!(message.contains("no chrome or chromium found"), "{message}");
+    assert!(message.contains(EXECUTABLE_ENV), "{message}");
+    assert!(message.contains("endpoint"), "{message}");
+}
+
+#[tokio::test]
+async fn a_headed_launch_into_a_named_profile_still_reports_its_failure() {
+    // Exercises the two branches an ordinary launch does not take — headed, and
+    // a profile directory the caller named, which must not be removed on the way
+    // out because it is not ours.
+    let Ok(shell) = which_shell() else { return };
+    let profile = std::env::temp_dir().join("tinybrowser-test-profile");
+    std::fs::create_dir_all(&profile).expect("creates the profile directory");
+
+    let error = launch(
+        &shell,
+        false,
+        Some(&profile.to_string_lossy()),
+        &["--nonsense".to_string()],
+    )
+    .await
+    .expect_err("refused");
+
+    assert!(matches!(error, Error::BrowserUnavailable { .. }), "{error}");
+    assert!(profile.exists(), "a profile the caller named was removed");
+    let _ = std::fs::remove_dir_all(&profile);
 }
