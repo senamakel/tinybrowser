@@ -1589,3 +1589,155 @@ async fn live_navigation_settles_at_every_wait_mode() {
 
     browser.close_session(&session.id).await.expect("closes");
 }
+
+#[tokio::test]
+async fn live_a_click_that_navigates_is_finished_before_the_next_call() {
+    if !enabled() {
+        return;
+    }
+    // The bug the bundled example found: dispatching a click returns as soon as
+    // the browser accepts the event, not when the page has finished reacting.
+    // Reading straight afterwards hit a document with no body yet.
+    let destination = serve("<h1>Arrived</h1>").await;
+    let (browser, session) = on(&format!("<a id='go' href='{destination}'>Go</a>")).await;
+
+    let outcome = browser
+        .perform(
+            &session.id,
+            &Action::Click {
+                target: Target::selector("#go"),
+                new_tab: false,
+            },
+        )
+        .await
+        .expect("clicks");
+    assert_eq!(outcome.page.url, destination);
+
+    // The page is readable immediately, with no wait in between.
+    let text = browser
+        .read_page(&session.id, &ReadRequest::default())
+        .await
+        .expect("reads the page the click landed on");
+    assert!(text.content.contains("Arrived"), "{}", text.content);
+
+    browser.close_session(&session.id).await.expect("closes");
+}
+
+#[tokio::test]
+async fn live_a_click_that_navigates_retires_the_refs_it_invalidated() {
+    if !enabled() {
+        return;
+    }
+    // A ref names a node in a document. A click that replaces that document
+    // must not leave the ref resolvable against whatever now sits there.
+    let destination = serve("<button id='other'>Other</button>").await;
+    let (browser, session) = on(&format!("<a id='go' href='{destination}'>Go</a>")).await;
+
+    let before = browser
+        .snapshot(&session.id, &SnapshotRequest::interactive())
+        .await
+        .expect("snapshots");
+    let reference = before.refs.first().expect("the link").id.clone();
+
+    browser
+        .perform(
+            &session.id,
+            &Action::Click {
+                target: Target::selector("#go"),
+                new_tab: false,
+            },
+        )
+        .await
+        .expect("clicks");
+
+    let error = browser
+        .perform(
+            &session.id,
+            &Action::Click {
+                target: Target::reference(&reference),
+                new_tab: false,
+            },
+        )
+        .await
+        .expect_err("refused");
+
+    assert!(matches!(error, Error::StaleRef { .. }), "{error}");
+    browser.close_session(&session.id).await.expect("closes");
+}
+
+#[tokio::test]
+async fn live_pressing_enter_in_a_form_settles_its_submission() {
+    if !enabled() {
+        return;
+    }
+    let destination = serve("<h1>Submitted</h1>").await;
+    let (browser, session) = on(&format!(
+        "<form action='{destination}' method='get'><input id='q' name='q'></form>"
+    ))
+    .await;
+
+    browser
+        .perform(
+            &session.id,
+            &Action::Focus {
+                target: Target::selector("#q"),
+            },
+        )
+        .await
+        .expect("focuses");
+    let outcome = browser
+        .perform(
+            &session.id,
+            &Action::Press {
+                key: "Enter".to_string(),
+            },
+        )
+        .await
+        .expect("presses");
+
+    assert!(
+        outcome.page.url.starts_with(&destination),
+        "{}",
+        outcome.page.url
+    );
+
+    let text = browser
+        .read_page(&session.id, &ReadRequest::default())
+        .await
+        .expect("reads");
+    assert!(text.content.contains("Submitted"), "{}", text.content);
+
+    browser.close_session(&session.id).await.expect("closes");
+}
+
+#[tokio::test]
+async fn live_a_click_that_navigates_nowhere_does_not_stall() {
+    if !enabled() {
+        return;
+    }
+    // The cost of the rule above is paid by every click that starts nothing, so
+    // it has to stay small: a menu opening must not wait out a page load.
+    let (browser, session) =
+        on("<button id='b' onclick=\"document.title = 'opened'\">Menu</button>").await;
+
+    let started = std::time::Instant::now();
+    let outcome = browser
+        .perform(
+            &session.id,
+            &Action::Click {
+                target: Target::selector("#b"),
+                new_tab: false,
+            },
+        )
+        .await
+        .expect("clicks");
+    let elapsed = started.elapsed();
+
+    assert_eq!(outcome.page.title, "opened");
+    assert!(
+        elapsed < std::time::Duration::from_secs(3),
+        "a click that navigated nowhere took {elapsed:?}"
+    );
+
+    browser.close_session(&session.id).await.expect("closes");
+}
