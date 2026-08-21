@@ -58,6 +58,26 @@ pub struct Browser {
     sessions: RwLock<HashMap<SessionId, Arc<Session>>>,
     outputs: Mutex<OutputStore>,
     limit: usize,
+    /// Sessions whose browser is starting but which are not in `sessions` yet.
+    ///
+    /// Counted because a browser takes time to launch, and the limit has to hold
+    /// over that window: without this, concurrent callers all read a count below
+    /// the limit, all pass the check, and all launch. Eight becomes however many
+    /// arrived at once, each one a Chrome process.
+    opening: std::sync::atomic::AtomicUsize,
+}
+
+/// Holds a reserved session slot, and gives it back if the launch fails.
+///
+/// A guard rather than a decrement at each error return: `open_session` has
+/// several failure paths, and one of them forgetting would leak a slot until the
+/// process ended, shrinking the effective limit with every failed open.
+struct Reservation<'a>(&'a std::sync::atomic::AtomicUsize);
+
+impl Drop for Reservation<'_> {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
+    }
 }
 
 impl Default for Browser {
@@ -80,6 +100,7 @@ impl Browser {
             sessions: RwLock::new(HashMap::new()),
             outputs: Mutex::new(OutputStore::default()),
             limit: limit.max(1),
+            opening: std::sync::atomic::AtomicUsize::new(0),
         }
     }
 
@@ -98,21 +119,36 @@ impl Browser {
     /// or reached.
     pub async fn open_session(&self, options: SessionOptions) -> Result<SessionInfo> {
         // Checked before the browser is launched, not after: the point of the
-        // limit is to not start the ninth browser.
-        if self.sessions.read().await.len() >= self.limit {
-            return Err(Error::LimitExceeded {
-                message: format!(
-                    "{} sessions are already open; close one before opening another",
-                    self.limit
-                ),
-            });
-        }
+        // limit is to not start the ninth browser. The slot is taken under the
+        // write lock and held for the whole launch, so two callers arriving
+        // together cannot both see room for one session.
+        let reservation = {
+            let sessions = self.sessions.write().await;
+            let held = sessions.len() + self.opening.load(std::sync::atomic::Ordering::Acquire);
+
+            if held >= self.limit {
+                return Err(Error::LimitExceeded {
+                    message: format!(
+                        "{} sessions are already open; close one before opening another",
+                        self.limit
+                    ),
+                });
+            }
+
+            self.opening
+                .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+            Reservation(&self.opening)
+        };
 
         let id = SessionId::new(uuid::Uuid::new_v4().to_string());
         let session = Arc::new(Session::open(id.clone(), options).await?);
         let info = session.info().await?;
 
         self.sessions.write().await.insert(id, session);
+
+        // Held until the session is in the table, so the slot is never counted
+        // twice and never lost.
+        drop(reservation);
         Ok(info)
     }
 

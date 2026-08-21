@@ -153,7 +153,15 @@ impl Session {
             refs: Mutex::new(RefMap::default()),
         };
 
-        session.configure().await?;
+        // A failure here has already cost a browser and a page target. Dropping
+        // the session cannot reclaim them — `close` is async and `Drop` is not —
+        // so each failed open would otherwise leave a Chrome process and its
+        // profile directory behind for the life of the host.
+        if let Err(error) = session.configure().await {
+            session.close().await;
+            return Err(error);
+        }
+
         Ok(session)
     }
 
