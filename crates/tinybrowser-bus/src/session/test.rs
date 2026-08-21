@@ -4,6 +4,8 @@
 //! disagree about `default_timeout_ms` fail at runtime with a decode error, and
 //! nothing else in the build would catch it.
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use super::{SessionId, SessionInfo, SessionOptions, Viewport};
 use serde_json::json;
 

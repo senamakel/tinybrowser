@@ -1,5 +1,7 @@
 //! Tests for the screenshot and held-output payload types.
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use super::{ImageFormat, OutputChunk, OutputId, OutputRef, ScreenshotRequest};
 use serde_json::json;
 

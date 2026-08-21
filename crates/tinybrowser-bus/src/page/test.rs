@@ -1,5 +1,7 @@
 //! Tests for the navigation and extraction payload types.
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use super::{EvaluateRequest, NavigateRequest, PageState, PageText, ReadFormat, ReadRequest};
 use crate::WaitUntil;
 use serde_json::json;

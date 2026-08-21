@@ -5,6 +5,8 @@
 //! reported, and the output operations, which need no browser at all because the
 //! store is fed by the capture path rather than by the socket.
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use tinybrowser_bus::{
     EvaluateRequest, NavigateRequest, OutputId, ReadRequest, ScreenshotRequest, SessionId,
     SnapshotRequest,

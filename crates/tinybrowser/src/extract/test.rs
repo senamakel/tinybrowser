@@ -3,6 +3,8 @@
 //! The traversal runs in the page, so what is testable here is the boundary
 //! around it: the truncation that decides how much of a page a model sees.
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use super::truncate;
 
 #[test]

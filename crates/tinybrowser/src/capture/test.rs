@@ -5,6 +5,8 @@
 //! which is where an off-by-one turns into a corrupted image a host cannot tell
 //! from a good one — and the eviction rules.
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use tinybrowser_bus::OutputId;

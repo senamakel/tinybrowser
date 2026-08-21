@@ -1,5 +1,7 @@
 //! Tests for the interaction payload types.
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use super::{Action, ActionOutcome, LocateBy, Locator, ScrollDirection, Target, WaitState};
 use crate::PageState;
 use serde_json::json;

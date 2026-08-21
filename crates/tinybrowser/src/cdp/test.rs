@@ -5,6 +5,8 @@
 //! The socket itself and the launch it performs are exercised by the
 //! `live-chrome` suite, where there is a browser to talk to.
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use super::endpoint::resolve;
 use super::launch::{EXECUTABLE_ENV, find_executable};
 use crate::error::Error;

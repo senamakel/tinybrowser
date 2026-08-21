@@ -7,6 +7,8 @@
 //! thrown exception arrives as a successful protocol reply, and reading it wrong
 //! turns every page error into a silent `null`.
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use std::collections::HashMap;
 
 use serde_json::json;

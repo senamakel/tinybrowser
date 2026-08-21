@@ -6,6 +6,8 @@
 //! target nobody recognises. The dispatch itself is exercised by the
 //! `live-chrome` suite.
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use tinybrowser_bus::{LocateBy, Locator, Target};
 
 use super::keys::parse;

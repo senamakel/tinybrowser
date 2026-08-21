@@ -1,5 +1,7 @@
 //! Tests for the `TinyBus` module adapter and its declared surface.
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use super::{GreetingService, setup};
 use template_bus::{GreetRequest, GreetResponse, names};
 use tinybus::broker::Broker;

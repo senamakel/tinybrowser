@@ -1,5 +1,7 @@
 //! Tests for the wire error names.
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use super::{
     BLOCKED_BY_POLICY, BROWSER_UNAVAILABLE, INVALID_INPUT, LIMIT_EXCEEDED, MODULE_FAILED, NAMES,
     NOT_ACTIONABLE, NO_SUCH_ELEMENT, NO_SUCH_OUTPUT, NO_SUCH_SESSION, PAGE_ERROR, PREFIX, STALE_REF,

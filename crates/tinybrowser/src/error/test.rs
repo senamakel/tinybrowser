@@ -3,6 +3,8 @@
 //! The point of these is the mapping: a variant whose wire name is wrong sends a
 //! host down the wrong recovery path, and nothing else in the build checks it.
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use super::Error;
 use tinybrowser_bus::errors;
 

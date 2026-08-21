@@ -1,5 +1,7 @@
 //! Tests for the snapshot payload types.
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use super::{ElementRef, Snapshot, SnapshotRequest};
 use serde_json::json;
 

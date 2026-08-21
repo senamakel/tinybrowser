@@ -4,6 +4,8 @@
 //! change to one of them is a wire break, so it should have to be made twice —
 //! once in the constant and once here.
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use super::{INTERFACE, METHODS, OBJECT_PATH, methods};
 
 #[test]

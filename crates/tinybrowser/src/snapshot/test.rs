@@ -5,6 +5,8 @@
 //! each filter drops. A change to any of those changes what every agent sees, so
 //! it should have to be made here too.
 
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use serde_json::json;
 use tinybrowser_bus::SnapshotRequest;
 
