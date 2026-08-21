@@ -153,8 +153,9 @@ fn code_for(character: char) -> String {
         return format!("Digit{character}");
     }
 
+    // No arm for a space: `parse` trims its input, so a space only ever arrives
+    // as the name `Space`, which the table above answers before reaching here.
     match character {
-        ' ' => "Space".to_string(),
         '-' => "Minus".to_string(),
         '=' => "Equal".to_string(),
         '.' => "Period".to_string(),
@@ -175,12 +176,13 @@ fn code_for(character: char) -> String {
 }
 
 /// The legacy virtual key code a character reports.
+///
+/// Zero for anything but a letter or a digit: there is no correct legacy code
+/// for punctuation without knowing the keyboard layout, and a plausible-looking
+/// wrong one is worse than an unidentified key.
 fn virtual_code(character: char) -> u32 {
     if character.is_ascii_alphanumeric() {
         return u32::from(character.to_ascii_uppercase() as u8);
     }
-    match character {
-        ' ' => 32,
-        _ => 0,
-    }
+    0
 }

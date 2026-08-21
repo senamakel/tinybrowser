@@ -178,7 +178,6 @@ fn every_punctuation_key_on_the_us_layout_gets_its_physical_key() {
     // A page reading `code` for a shortcut — a great many do — sees the wrong
     // key otherwise, and the failure is silent.
     for (character, code) in [
-        (" ", "Space"),
         ("-", "Minus"),
         ("=", "Equal"),
         (".", "Period"),
@@ -195,11 +194,17 @@ fn every_punctuation_key_on_the_us_layout_gets_its_physical_key() {
 }
 
 #[test]
-fn a_space_carries_the_virtual_code_a_page_expects() {
-    let stroke = parse(" ").expect("parses");
+fn a_space_is_spelled_by_name_and_types_one() {
+    // `parse` trims its input, so a bare space cannot be a chord — `Space` is
+    // the spelling, and it has to insert an actual space.
+    let stroke = parse("Space").expect("parses");
 
+    assert_eq!(stroke.code, "Space");
     assert_eq!(stroke.key_code, 32);
     assert_eq!(stroke.text.as_deref(), Some(" "));
+
+    let error = parse(" ").expect_err("refused");
+    assert!(matches!(error, Error::InvalidInput { .. }), "{error}");
 }
 
 #[test]
@@ -210,8 +215,11 @@ fn punctuation_reports_no_virtual_code_rather_than_a_wrong_one() {
 }
 
 #[test]
-fn the_named_space_and_the_character_agree() {
-    assert_eq!(parse("space").expect("parses"), parse(" ").expect("parses"));
+fn key_names_are_matched_regardless_of_case_for_space_too() {
+    assert_eq!(
+        parse("space").expect("parses"),
+        parse("Space").expect("parses")
+    );
 }
 
 #[test]
