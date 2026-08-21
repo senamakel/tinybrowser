@@ -51,8 +51,9 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use tinybrowser::{
-    Action, Browser, Error, LocateBy, Locator, NavigateRequest, ReadFormat, ReadRequest,
-    ScreenshotRequest, SessionInfo, SessionOptions, SnapshotRequest, Target, WaitUntil,
+    Action, Browser, Error, ImageFormat, LocateBy, Locator, NavigateRequest, ReadFormat,
+    ReadRequest, ScreenshotRequest, ScrollDirection, SessionInfo, SessionOptions, SnapshotRequest,
+    Target, WaitState, WaitUntil,
 };
 
 /// Serves `body` as a complete HTML document on loopback, and returns its URL.
@@ -562,4 +563,754 @@ fn base64_decode(encoded: &str) -> Vec<u8> {
     base64::engine::general_purpose::STANDARD
         .decode(encoded)
         .expect("the module encodes standard base64")
+}
+
+#[tokio::test]
+async fn live_double_click_and_hover_reach_their_handlers() {
+    if !enabled() {
+        return;
+    }
+    let (browser, session) = on("<div id='t' style='padding:40px'>Target</div>\
+         <script>const t = document.getElementById('t');\
+         t.ondblclick = () => { document.title = 'double'; };\
+         t.onmouseover = () => { document.title = 'hovered'; };</script>")
+    .await;
+
+    let hovered = browser
+        .perform(
+            &session.id,
+            &Action::Hover {
+                target: Target::selector("#t"),
+            },
+        )
+        .await
+        .expect("hovers");
+    assert_eq!(hovered.page.title, "hovered");
+
+    let clicked = browser
+        .perform(
+            &session.id,
+            &Action::DoubleClick {
+                target: Target::selector("#t"),
+            },
+        )
+        .await
+        .expect("double-clicks");
+    assert_eq!(clicked.page.title, "double");
+
+    browser.close_session(&session.id).await.expect("closes");
+}
+
+#[tokio::test]
+async fn live_typing_key_by_key_reaches_a_field_that_reacts_to_each_one() {
+    if !enabled() {
+        return;
+    }
+    // The distinction `Type` exists for: an autocomplete that fires per
+    // keystroke never sees the input a bulk value assignment skips.
+    let (browser, session) = on("<input id='q'><script>let count = 0;\
+         document.getElementById('q').addEventListener('input', () => { \
+            count += 1; document.title = String(count); });</script>")
+    .await;
+
+    browser
+        .perform(
+            &session.id,
+            &Action::Type {
+                target: Some(Target::selector("#q")),
+                text: "abc".to_string(),
+                delay_ms: Some(1),
+            },
+        )
+        .await
+        .expect("types");
+
+    let outcome = browser
+        .perform(
+            &session.id,
+            &Action::GetAttribute {
+                target: Target::selector("#q"),
+                attribute: "id".to_string(),
+            },
+        )
+        .await
+        .expect("reads an attribute");
+
+    assert_eq!(outcome.value, serde_json::json!("q"));
+    assert_eq!(outcome.page.title, "3", "one input event per keystroke");
+
+    browser.close_session(&session.id).await.expect("closes");
+}
+
+#[tokio::test]
+async fn live_typing_without_a_target_goes_to_whatever_has_focus() {
+    if !enabled() {
+        return;
+    }
+    let (browser, session) = on("<input id='q' autofocus><script>\
+         document.getElementById('q').addEventListener('input', (e) => { \
+            document.title = e.target.value; });</script>")
+    .await;
+
+    browser
+        .perform(
+            &session.id,
+            &Action::Focus {
+                target: Target::selector("#q"),
+            },
+        )
+        .await
+        .expect("focuses");
+    let outcome = browser
+        .perform(
+            &session.id,
+            &Action::Type {
+                target: None,
+                text: "typed".to_string(),
+                delay_ms: None,
+            },
+        )
+        .await
+        .expect("types");
+
+    assert_eq!(outcome.page.title, "typed");
+    browser.close_session(&session.id).await.expect("closes");
+}
+
+#[tokio::test]
+async fn live_an_absent_attribute_reads_as_null() {
+    if !enabled() {
+        return;
+    }
+    let (browser, session) = on("<p id='p'>text</p>").await;
+
+    let outcome = browser
+        .perform(
+            &session.id,
+            &Action::GetAttribute {
+                target: Target::selector("#p"),
+                attribute: "data-missing".to_string(),
+            },
+        )
+        .await
+        .expect("reads");
+
+    assert!(outcome.value.is_null());
+    browser.close_session(&session.id).await.expect("closes");
+}
+
+#[tokio::test]
+async fn live_selecting_an_option_fires_the_change_a_form_listens_for() {
+    if !enabled() {
+        return;
+    }
+    let (browser, session) = on(
+        "<select id='s'><option value='a'>Alpha</option><option value='b'>Beta</option></select>\
+         <script>document.getElementById('s').addEventListener('change', (e) => { \
+            document.title = e.target.value; });</script>",
+    )
+    .await;
+
+    let outcome = browser
+        .perform(
+            &session.id,
+            &Action::Select {
+                target: Target::selector("#s"),
+                values: vec!["b".to_string()],
+            },
+        )
+        .await
+        .expect("selects");
+    assert_eq!(outcome.page.title, "b");
+
+    // An option nothing matches is an error, not a silent no-op that leaves the
+    // form on its previous value while reporting success.
+    let error = browser
+        .perform(
+            &session.id,
+            &Action::Select {
+                target: Target::selector("#s"),
+                values: vec!["nonexistent".to_string()],
+            },
+        )
+        .await
+        .expect_err("refused");
+    assert!(matches!(error, Error::PageError { .. }), "{error}");
+
+    browser.close_session(&session.id).await.expect("closes");
+}
+
+#[tokio::test]
+async fn live_check_sets_a_state_rather_than_toggling_it() {
+    if !enabled() {
+        return;
+    }
+    // Called twice with the same value. A toggle would leave the box in the
+    // opposite state to the one that was asked for.
+    let (browser, session) = on("<input type='checkbox' id='c'>").await;
+
+    for _ in 0..2 {
+        browser
+            .perform(
+                &session.id,
+                &Action::Check {
+                    target: Target::selector("#c"),
+                    checked: true,
+                },
+            )
+            .await
+            .expect("checks");
+    }
+
+    let checked = browser
+        .evaluate(
+            &session.id,
+            &tinybrowser::EvaluateRequest::new("document.getElementById('c').checked"),
+        )
+        .await
+        .expect("evaluates");
+    assert_eq!(checked, serde_json::json!(true));
+
+    browser
+        .perform(
+            &session.id,
+            &Action::Check {
+                target: Target::selector("#c"),
+                checked: false,
+            },
+        )
+        .await
+        .expect("unchecks");
+    let unchecked = browser
+        .evaluate(
+            &session.id,
+            &tinybrowser::EvaluateRequest::new("document.getElementById('c').checked"),
+        )
+        .await
+        .expect("evaluates");
+    assert_eq!(unchecked, serde_json::json!(false));
+
+    browser.close_session(&session.id).await.expect("closes");
+}
+
+#[tokio::test]
+async fn live_scrolling_moves_the_page_and_an_element_that_scrolls_within_it() {
+    if !enabled() {
+        return;
+    }
+    let (browser, session) = on("<div id='box' style='height:60px;overflow:auto'>\
+           <div style='height:2000px'>tall</div></div>\
+         <div style='height:4000px'>page</div>")
+    .await;
+
+    for direction in [ScrollDirection::Down, ScrollDirection::Bottom] {
+        browser
+            .perform(
+                &session.id,
+                &Action::Scroll {
+                    direction,
+                    pixels: None,
+                    target: None,
+                },
+            )
+            .await
+            .expect("scrolls the page");
+    }
+    let page_offset = browser
+        .evaluate(&session.id, &tinybrowser::EvaluateRequest::new("scrollY"))
+        .await
+        .expect("evaluates");
+    assert!(page_offset.as_f64().unwrap_or(0.0) > 0.0, "{page_offset}");
+
+    browser
+        .perform(
+            &session.id,
+            &Action::Scroll {
+                direction: ScrollDirection::Down,
+                pixels: Some(200),
+                target: Some(Target::selector("#box")),
+            },
+        )
+        .await
+        .expect("scrolls the element");
+    let box_offset = browser
+        .evaluate(
+            &session.id,
+            &tinybrowser::EvaluateRequest::new("document.getElementById('box').scrollTop"),
+        )
+        .await
+        .expect("evaluates");
+    assert_eq!(box_offset, serde_json::json!(200));
+
+    browser
+        .perform(
+            &session.id,
+            &Action::Scroll {
+                direction: ScrollDirection::Top,
+                pixels: None,
+                target: None,
+            },
+        )
+        .await
+        .expect("scrolls back");
+    let back = browser
+        .evaluate(&session.id, &tinybrowser::EvaluateRequest::new("scrollY"))
+        .await
+        .expect("evaluates");
+    assert_eq!(back, serde_json::json!(0));
+
+    browser.close_session(&session.id).await.expect("closes");
+}
+
+#[tokio::test]
+async fn live_waiting_returns_when_the_condition_holds() {
+    if !enabled() {
+        return;
+    }
+    let (browser, session) = on("<div id='late' style='display:none'>Ready</div>\
+         <script>setTimeout(() => { \
+            document.getElementById('late').style.display = 'block'; }, 150);</script>")
+    .await;
+
+    browser
+        .perform(
+            &session.id,
+            &Action::WaitFor {
+                target: Some(Target::selector("#late")),
+                text: None,
+                state: WaitState::Visible,
+                ms: None,
+                timeout_ms: Some(5_000),
+            },
+        )
+        .await
+        .expect("waits for visibility");
+
+    browser
+        .perform(
+            &session.id,
+            &Action::WaitFor {
+                target: None,
+                text: Some("Ready".to_string()),
+                state: WaitState::Visible,
+                ms: None,
+                timeout_ms: Some(5_000),
+            },
+        )
+        .await
+        .expect("waits for text");
+
+    browser
+        .perform(
+            &session.id,
+            &Action::WaitFor {
+                target: Some(Target::selector("#absent")),
+                text: None,
+                state: WaitState::Detached,
+                ms: None,
+                timeout_ms: Some(5_000),
+            },
+        )
+        .await
+        .expect("an absent element already satisfies detached");
+
+    // A flat delay is the only thing a caller with neither a target nor text can
+    // have meant.
+    browser
+        .perform(
+            &session.id,
+            &Action::WaitFor {
+                target: None,
+                text: None,
+                state: WaitState::Visible,
+                ms: Some(10),
+                timeout_ms: None,
+            },
+        )
+        .await
+        .expect("waits a flat delay");
+
+    browser.close_session(&session.id).await.expect("closes");
+}
+
+#[tokio::test]
+async fn live_waiting_for_something_that_never_happens_times_out() {
+    if !enabled() {
+        return;
+    }
+    let (browser, session) = on("<p>static</p>").await;
+
+    let error = browser
+        .perform(
+            &session.id,
+            &Action::WaitFor {
+                target: None,
+                text: Some("never appears".to_string()),
+                state: WaitState::Visible,
+                ms: None,
+                timeout_ms: Some(300),
+            },
+        )
+        .await
+        .expect_err("times out");
+
+    assert!(matches!(error, Error::Timeout { .. }), "{error}");
+    browser.close_session(&session.id).await.expect("closes");
+}
+
+#[tokio::test]
+async fn live_history_moves_back_and_forward_and_refuses_the_ends() {
+    if !enabled() {
+        return;
+    }
+    let (browser, session) = on("<h1>First</h1>").await;
+    let first = browser.list_sessions().await[0].url.clone();
+
+    browser
+        .navigate(
+            &session.id,
+            &NavigateRequest::new(serve("<h1>Second</h1>").await),
+        )
+        .await
+        .expect("navigates");
+
+    let back = browser
+        .perform(&session.id, &Action::Back)
+        .await
+        .expect("goes back");
+    assert_eq!(back.page.url, first);
+
+    let forward = browser
+        .perform(&session.id, &Action::Forward)
+        .await
+        .expect("goes forward");
+    assert_ne!(forward.page.url, first);
+
+    // At the end of the history there is nothing to go to, and saying so is
+    // better than a no-op that reports success.
+    let error = browser
+        .perform(&session.id, &Action::Forward)
+        .await
+        .expect_err("refused");
+    assert!(matches!(error, Error::InvalidInput { .. }), "{error}");
+
+    browser
+        .perform(&session.id, &Action::Reload)
+        .await
+        .expect("reloads");
+
+    browser.close_session(&session.id).await.expect("closes");
+}
+
+#[tokio::test]
+async fn live_reading_a_page_as_text_drops_the_markdown_syntax() {
+    if !enabled() {
+        return;
+    }
+    let (browser, session) = on("<h1>Title</h1><a href='https://example.com/x'>Link</a>").await;
+
+    let text = browser
+        .read_page(
+            &session.id,
+            &ReadRequest {
+                format: ReadFormat::Text,
+                ..ReadRequest::default()
+            },
+        )
+        .await
+        .expect("reads");
+
+    assert!(text.content.contains("Title"), "{}", text.content);
+    assert!(!text.content.contains("# Title"), "{}", text.content);
+    assert!(!text.content.contains("]("), "{}", text.content);
+
+    browser.close_session(&session.id).await.expect("closes");
+}
+
+#[tokio::test]
+async fn live_reading_a_selector_reads_only_that_subtree() {
+    if !enabled() {
+        return;
+    }
+    let (browser, session) = on("<div id='keep'>kept</div><div id='drop'>dropped</div>").await;
+
+    let text = browser
+        .read_page(
+            &session.id,
+            &ReadRequest {
+                selector: Some("#keep".to_string()),
+                ..ReadRequest::default()
+            },
+        )
+        .await
+        .expect("reads");
+
+    assert!(text.content.contains("kept"), "{}", text.content);
+    assert!(!text.content.contains("dropped"), "{}", text.content);
+
+    browser.close_session(&session.id).await.expect("closes");
+}
+
+#[tokio::test]
+async fn live_reading_a_selector_that_matches_nothing_is_reported() {
+    if !enabled() {
+        return;
+    }
+    let (browser, session) = on("<p>only this</p>").await;
+
+    let error = browser
+        .read_page(
+            &session.id,
+            &ReadRequest {
+                selector: Some("#absent".to_string()),
+                ..ReadRequest::default()
+            },
+        )
+        .await
+        .expect_err("refused");
+
+    assert!(matches!(error, Error::NoSuchElement { .. }), "{error}");
+    browser.close_session(&session.id).await.expect("closes");
+}
+
+#[tokio::test]
+async fn live_reading_as_html_returns_the_live_dom() {
+    if !enabled() {
+        return;
+    }
+    // Not the response body: what the page became after its scripts ran.
+    let (browser, session) = on(
+        "<div id='root'></div><script>document.getElementById('root').innerHTML = \
+            '<span>injected</span>';</script>",
+    )
+    .await;
+
+    let html = browser
+        .read_page(
+            &session.id,
+            &ReadRequest {
+                format: ReadFormat::Html,
+                ..ReadRequest::default()
+            },
+        )
+        .await
+        .expect("reads");
+    assert!(html.content.contains("injected"), "{}", html.content);
+
+    let fragment = browser
+        .read_page(
+            &session.id,
+            &ReadRequest {
+                format: ReadFormat::Html,
+                selector: Some("#root".to_string()),
+                ..ReadRequest::default()
+            },
+        )
+        .await
+        .expect("reads");
+    assert!(
+        fragment.content.starts_with("<div id=\"root\""),
+        "{}",
+        fragment.content
+    );
+
+    browser.close_session(&session.id).await.expect("closes");
+}
+
+#[tokio::test]
+async fn live_reading_reports_truncation_rather_than_hiding_it() {
+    if !enabled() {
+        return;
+    }
+    let (browser, session) = on("<p>a long enough paragraph to cut</p>").await;
+
+    let text = browser
+        .read_page(
+            &session.id,
+            &ReadRequest {
+                max_chars: 5,
+                ..ReadRequest::default()
+            },
+        )
+        .await
+        .expect("reads");
+
+    assert!(text.truncated);
+    assert_eq!(text.content.chars().count(), 5);
+    browser.close_session(&session.id).await.expect("closes");
+}
+
+#[tokio::test]
+async fn live_a_snapshot_can_be_scoped_and_bounded() {
+    if !enabled() {
+        return;
+    }
+    let (browser, session) =
+        on("<div id='panel'><button>Inside</button></div><button>Outside</button>").await;
+
+    let scoped = browser
+        .snapshot(
+            &session.id,
+            &SnapshotRequest {
+                selector: Some("#panel".to_string()),
+                ..SnapshotRequest::interactive()
+            },
+        )
+        .await
+        .expect("snapshots");
+    assert!(scoped.tree.contains("Inside"), "{}", scoped.tree);
+    assert!(!scoped.tree.contains("Outside"), "{}", scoped.tree);
+
+    let bounded = browser
+        .snapshot(
+            &session.id,
+            &SnapshotRequest {
+                max_chars: 10,
+                ..SnapshotRequest::default()
+            },
+        )
+        .await
+        .expect("snapshots");
+    assert!(bounded.truncated);
+
+    // The generation moves for every snapshot, so refs from the first are dead.
+    assert!(bounded.sequence > scoped.sequence);
+
+    let error = browser
+        .snapshot(
+            &session.id,
+            &SnapshotRequest {
+                selector: Some("#absent".to_string()),
+                ..SnapshotRequest::default()
+            },
+        )
+        .await
+        .expect_err("refused");
+    assert!(matches!(error, Error::NoSuchElement { .. }), "{error}");
+
+    browser.close_session(&session.id).await.expect("closes");
+}
+
+#[tokio::test]
+async fn live_screenshots_cover_the_page_the_element_and_the_lossy_formats() {
+    if !enabled() {
+        return;
+    }
+    let (browser, session) = on(
+        "<div id='box' style='width:100px;height:80px;background:#333'></div>\
+            <div style='height:3000px'></div>",
+    )
+    .await;
+
+    let full = browser
+        .screenshot(
+            &session.id,
+            &ScreenshotRequest {
+                full_page: true,
+                ..ScreenshotRequest::default()
+            },
+        )
+        .await
+        .expect("captures the page");
+    assert!(
+        full.height > 1000,
+        "a full-page capture is taller than the viewport"
+    );
+
+    let element = browser
+        .screenshot(
+            &session.id,
+            &ScreenshotRequest {
+                target: Some(Target::selector("#box")),
+                format: ImageFormat::Jpeg,
+                quality: Some(70),
+                ..ScreenshotRequest::default()
+            },
+        )
+        .await
+        .expect("captures the element");
+    assert_eq!(element.media_type, "image/jpeg");
+    assert_eq!((element.width, element.height), (100, 80));
+
+    // Quality outside the range is the caller's mistake, and saying so is more
+    // useful than a protocol error from the browser.
+    let error = browser
+        .screenshot(
+            &session.id,
+            &ScreenshotRequest {
+                format: ImageFormat::Webp,
+                quality: Some(0),
+                ..ScreenshotRequest::default()
+            },
+        )
+        .await
+        .expect_err("refused");
+    assert!(matches!(error, Error::InvalidInput { .. }), "{error}");
+
+    for handle in [full, element] {
+        browser.release_output(&handle.id).await.expect("releases");
+    }
+    browser.close_session(&session.id).await.expect("closes");
+}
+
+#[tokio::test]
+async fn live_the_session_limit_refuses_the_one_past_it() {
+    if !enabled() {
+        return;
+    }
+    let browser = Browser::with_session_limit(1);
+    let first = browser
+        .open_session(options())
+        .await
+        .expect("a browser is available; see this file's docs");
+
+    let error = browser.open_session(options()).await.expect_err("refused");
+    assert!(matches!(error, Error::LimitExceeded { .. }), "{error}");
+
+    // And the limit is a bound on what is open, not a lifetime cap.
+    browser.close_session(&first.id).await.expect("closes");
+    let second = browser.open_session(options()).await.expect("opens");
+
+    browser.shutdown().await;
+    assert!(browser.list_sessions().await.is_empty());
+    let _ = second;
+}
+
+#[tokio::test]
+async fn live_a_session_can_attach_to_a_browser_it_did_not_launch() {
+    if !enabled() {
+        return;
+    }
+    // The arrangement a container deployment uses: one browser, many sessions,
+    // and closing a session leaves the browser somebody else owns running.
+    let host = Browser::new();
+    let launched = host
+        .open_session(options())
+        .await
+        .expect("a browser is available; see this file's docs");
+
+    let attached_engine = Browser::new();
+    let attached = attached_engine
+        .open_session(SessionOptions {
+            endpoint: Some(launched.endpoint.clone()),
+            ..options()
+        })
+        .await
+        .expect("attaches");
+
+    assert!(!attached.launched, "an attached session did not launch it");
+    attached_engine
+        .close_session(&attached.id)
+        .await
+        .expect("closes");
+
+    // The browser is still there, which is the whole point.
+    host.navigate(
+        &launched.id,
+        &NavigateRequest::new(serve("<p>still here</p>").await),
+    )
+    .await
+    .expect("the launched browser survived");
+
+    host.shutdown().await;
 }
