@@ -37,7 +37,7 @@ serde_json = { workspace = true }
 tokio = { workspace = true, features = ["process", "io-util", "fs", "sync", "net"] }
 # The Chrome DevTools Protocol is JSON-RPC over a WebSocket. This is the client
 # half of that socket, with TLS so a remote `wss://` endpoint works unchanged.
-tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
+tokio-tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"] }
 # `SplitSink`/`StreamExt` over the WebSocket, and nothing else.
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 # Chrome publishes its per-target WebSocket URLs over an HTTP endpoint
@@ -63,7 +63,7 @@ base64 = "0.22"
 # The CDP client's own tests stand up a WebSocket server in place of a browser,
 # which is the only way to exercise what happens when one misbehaves: a protocol
 # error, a command that is never answered, a socket that closes mid-call.
-tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
+tokio-tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"] }
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 
 [features]
