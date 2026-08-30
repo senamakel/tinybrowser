@@ -46,7 +46,7 @@ futures-util = { version = "0.3", default-features = false, features = ["sink", 
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-webpki-roots"] }
 # Screenshots cross the bus as base64 inside a JSON frame, and CDP hands them
 # over base64-encoded already.
-base64 = "0.22"
+base64 = "0.23"
 # Held screenshot outputs are addressed by an unguessable id.
 uuid = { version = "1", features = ["v4"] }
 # Held outputs are digested so a host can verify what it reassembled.
@@ -59,7 +59,7 @@ url = "2"
 # The GitHub release verifier passes an explicit empty module configuration.
 serde_json = { workspace = true }
 # The live suite reassembles a held screenshot to check it round trips.
-base64 = "0.22"
+base64 = "0.23"
 # The CDP client's own tests stand up a WebSocket server in place of a browser,
 # which is the only way to exercise what happens when one misbehaves: a protocol
 # error, a command that is never answered, a socket that closes mid-call.
