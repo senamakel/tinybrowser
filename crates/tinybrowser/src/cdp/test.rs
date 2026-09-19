@@ -281,7 +281,7 @@ async fn fake_browser(
 
             match reply(id, method) {
                 Some(response) => {
-                    if socket.send(Message::Text(response)).await.is_err() {
+                    if socket.send(Message::Text(response.into())).await.is_err() {
                         return;
                     }
                 }

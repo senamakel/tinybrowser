@@ -134,15 +134,13 @@ impl CdpClient {
     ///
     /// [`Error::BrowserUnavailable`] when the socket cannot be opened.
     pub(crate) async fn connect(url: &str) -> Result<Arc<Self>> {
-        let config = WebSocketConfig {
+        let config = WebSocketConfig::default()
             // A full-page screenshot arrives base64-encoded in a single CDP
             // frame and routinely exceeds tungstenite's 16 MiB default. The
             // module bounds the image itself; bounding it again here would only
             // turn a large screenshot into a closed socket.
-            max_message_size: None,
-            max_frame_size: None,
-            ..Default::default()
-        };
+            .max_message_size(None)
+            .max_frame_size(None);
 
         let (socket, _) = tokio_tungstenite::connect_async_with_config(url, Some(config), false)
             .await
@@ -164,10 +162,11 @@ impl CdpClient {
                     Ok(Message::Text(text)) => text,
                     // A CDP proxy in front of a remote browser may frame its
                     // replies as binary; the payload is the same JSON.
-                    Ok(Message::Binary(bytes)) => match String::from_utf8(bytes) {
+                    Ok(Message::Binary(bytes)) => match String::from_utf8(bytes.to_vec()) {
                         Ok(text) => text,
                         Err(_) => continue,
-                    },
+                    }
+                    .into(),
                     Ok(Message::Close(_)) | Err(_) => break,
                     Ok(_) => continue,
                 };
@@ -223,7 +222,7 @@ impl CdpClient {
                         // client — and so the socket — alive for as long as this
                         // task runs, which is forever.
                         let Some(client) = pinger.upgrade() else { break };
-                        if client.sink.lock().await.send(Message::Ping(Vec::new())).await.is_err() {
+                        if client.sink.lock().await.send(Message::Ping(Vec::new().into())).await.is_err() {
                             break;
                         }
                     }
@@ -273,7 +272,7 @@ impl CdpClient {
         self.sink
             .lock()
             .await
-            .send(Message::Text(message.to_string()))
+            .send(Message::Text(message.to_string().into()))
             .await
             .map_err(|error| Error::connection_lost(format!("sending {method}: {error}")))?;
 
