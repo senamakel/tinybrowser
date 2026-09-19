@@ -14,6 +14,7 @@
 //! taken is the one a caller is about to read.
 
 use std::collections::HashMap;
+use std::fmt::Write;
 use std::time::{Duration, Instant};
 
 use base64::Engine as _;
@@ -100,7 +101,11 @@ impl OutputStore {
             self.held.remove(&oldest);
         }
 
-        let sha256 = format!("{:x}", Sha256::digest(&bytes));
+        let digest = Sha256::digest(&bytes);
+        let mut sha256 = String::with_capacity(digest.len() * 2);
+        for byte in digest.as_slice() {
+            let _ = write!(sha256, "{byte:02x}");
+        }
         let id = OutputId::new(uuid::Uuid::new_v4().to_string());
         let handle = OutputRef {
             id: id.clone(),
