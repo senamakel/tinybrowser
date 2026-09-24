@@ -174,14 +174,14 @@ impl BrowserControl for FakeBrowser {
 #[derive(Debug)]
 struct FakeDecisions {
     decisions: Mutex<VecDeque<Result<Decision>>>,
-    offered: Mutex<Vec<(bool, bool)>>,
+    context_flags: Mutex<Vec<(bool, bool)>>,
 }
 
 impl FakeDecisions {
     fn new(decisions: impl IntoIterator<Item = Decision>) -> Self {
         Self {
             decisions: Mutex::new(decisions.into_iter().map(Ok).collect()),
-            offered: Mutex::new(Vec::new()),
+            context_flags: Mutex::new(Vec::new()),
         }
     }
 }
@@ -195,9 +195,9 @@ impl DecisionSource for FakeDecisions {
         done_unconfirmed: bool,
         fill_already_entered: bool,
     ) -> impl std::future::Future<Output = Result<Decision>> {
-        self.offered
+        self.context_flags
             .lock()
-            .expect("offered lock")
+            .expect("context flags lock")
             .push((done_unconfirmed, fill_already_entered));
         std::future::ready(
             self.decisions
@@ -420,7 +420,7 @@ async fn an_unconfirmed_done_reconsiders_the_visible_submit_button() {
     assert_eq!(result.steps[1].decision.operation, Operation::Click);
     assert_eq!(browser.actions.lock().expect("actions").len(), 2);
     assert_eq!(
-        *decisions.offered.lock().expect("offered lock"),
+        *decisions.context_flags.lock().expect("context flags lock"),
         [(false, false), (false, true), (true, true), (false, false)]
     );
 }
@@ -465,7 +465,7 @@ async fn filling_one_of_multiple_inputs_keeps_fill_available() {
     ]));
     let result = controller()
         .run_with(
-            &FakeBrowser::new([before, after]),
+            &FakeBrowser::new([before, after.clone()]),
             &decisions,
             &SessionId::new("session"),
             &task,
@@ -475,9 +475,16 @@ async fn filling_one_of_multiple_inputs_keeps_fill_available() {
 
     assert_eq!(result.status, TaskStatus::Blocked);
     assert_eq!(
-        *decisions.offered.lock().expect("offered lock"),
+        *decisions.context_flags.lock().expect("context flags lock"),
         [(false, false), (false, false)]
     );
+    let second_request = policy::build_request(&task, &after, &result.steps, false, false)
+        .expect("second field remains fillable");
+    let Question::Choice(operations) = &second_request.questions["operation"] else {
+        panic!("operation must be a choice");
+    };
+    assert!(operations.criteria.contains_key("FILL"));
+    assert!(second_request.questions.contains_key("fill_input"));
 }
 
 #[tokio::test]
