@@ -394,7 +394,8 @@ async fn an_unconfirmed_done_reconsiders_the_visible_submit_button() {
         .tree
         .push_str("\ntextbox \"Query\" value=\"rust\" @e1");
     let mut submitted = filled.clone();
-    submitted.url = "https://example.com/results".to_owned();
+    // A same-URL re-render after the click makes FILL available again.
+    submitted.url = filled.url.clone();
     submitted.tree = "heading \"Results\" @e4".to_owned();
 
     let mut fill = decision(Operation::Fill, Some(element("e1", "textbox", "Query")));
@@ -447,6 +448,37 @@ async fn repeated_unconfirmed_done_stops_within_the_decision_budget() {
     assert_eq!(result.status, TaskStatus::DoneUnconfirmed);
     assert!(result.steps.is_empty());
     assert!(browser.actions.lock().expect("actions").is_empty());
+}
+
+#[tokio::test]
+async fn filling_one_of_multiple_inputs_keeps_fill_available() {
+    let before = snapshot();
+    let mut after = before.clone();
+    after
+        .tree
+        .push_str("\ntextbox \"Query\" value=\"rust\" @e1");
+    let mut fill = decision(Operation::Fill, Some(element("e1", "textbox", "Query")));
+    fill.input_name = Some("query".to_owned());
+    let decisions = FakeDecisions::new([fill, decision(Operation::Blocked, None)]);
+    let task = TaskRequest::new("fill query and site").with_inputs(BTreeMap::from([
+        ("query".to_owned(), "rust".to_owned()),
+        ("site".to_owned(), "example.com".to_owned()),
+    ]));
+    let result = controller()
+        .run_with(
+            &FakeBrowser::new([before, after]),
+            &decisions,
+            &SessionId::new("session"),
+            &task,
+        )
+        .await
+        .expect("task result");
+
+    assert_eq!(result.status, TaskStatus::Blocked);
+    assert_eq!(
+        *decisions.offered.lock().expect("offered lock"),
+        [(false, false), (false, false)]
+    );
 }
 
 #[tokio::test]
