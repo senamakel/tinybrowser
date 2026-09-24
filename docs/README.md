@@ -38,6 +38,8 @@ The current documents:
 - [`specs/jev-browser-control.md`](specs/jev-browser-control.md) and
   [`plans/jev-browser-control.md`](plans/jev-browser-control.md) — the bounded
   Jev decision loop, deterministic stop gates, and pinned browser references.
+- [`jev-integration.md`](jev-integration.md) — how one Jev request selects an
+  action, how Rust applies it, and what a host must provide around the loop.
 - [`specs/download-handles.md`](specs/download-handles.md) and
   [`plans/download-handles.md`](plans/download-handles.md) — retained Chrome
   download events and waitable TinyBus handles.
