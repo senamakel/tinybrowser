@@ -329,7 +329,7 @@ fn done_requires_the_independent_completion_threshold() {
 }
 
 #[test]
-fn irreversible_policy_is_narrow_and_click_only() {
+fn irreversible_policy_covers_consequential_clicks_and_unlabeled_controls() {
     assert!(policy::is_irreversible(&decision(
         Operation::Click,
         Some(element("e1", "button", "Place order"))
@@ -338,9 +338,43 @@ fn irreversible_policy_is_narrow_and_click_only() {
         Operation::Click,
         Some(element("e1", "button", "Place order:"))
     )));
+    for label in [
+        "Submit application",
+        "Transfer funds",
+        "Authorize payment",
+        "Approve access",
+        "Confirm transfer",
+        "Save changes",
+        "Share document",
+        "Invite member",
+    ] {
+        assert!(
+            policy::is_irreversible(&decision(
+                Operation::Click,
+                Some(element("e1", "button", label))
+            )),
+            "{label} must require confirmation"
+        );
+    }
+    assert!(policy::is_irreversible(&decision(
+        Operation::Click,
+        Some(element("e1", "button", "  "))
+    )));
+    assert!(policy::is_irreversible(&decision(
+        Operation::Click,
+        Some(element("e1", "menuitem", ""))
+    )));
     assert!(!policy::is_irreversible(&decision(
         Operation::Click,
         Some(element("e2", "link", "Order history"))
+    )));
+    assert!(!policy::is_irreversible(&decision(
+        Operation::Click,
+        Some(element("e2", "button", "Search"))
+    )));
+    assert!(!policy::is_irreversible(&decision(
+        Operation::Click,
+        Some(element("e2", "link", ""))
     )));
     assert!(!policy::is_irreversible(&decision(
         Operation::Fill,
@@ -492,22 +526,27 @@ async fn the_runner_accepts_only_independently_confirmed_done() {
 
 #[tokio::test]
 async fn the_runner_stops_before_an_irreversible_click() {
-    let click = decision(
-        Operation::Click,
-        Some(element("e8", "button", "Delete account")),
-    );
-    let result = controller()
-        .run_with(
-            &FakeBrowser::new([snapshot()]),
-            &FakeDecisions::new([click]),
-            &SessionId::new("session"),
-            &TaskRequest::new("delete the account"),
-        )
-        .await
-        .expect("task result");
+    for label in ["Delete account", "Submit", "Transfer", "Authorize", ""] {
+        let click = decision(Operation::Click, Some(element("e8", "button", label)));
+        let browser = FakeBrowser::new([snapshot()]);
+        let result = controller()
+            .run_with(
+                &browser,
+                &FakeDecisions::new([click.clone()]),
+                &SessionId::new("session"),
+                &TaskRequest::new("complete the requested action"),
+            )
+            .await
+            .expect("task result");
 
-    assert_eq!(result.status, TaskStatus::NeedsConfirmation);
-    assert!(result.pending.is_some());
+        assert_eq!(result.status, TaskStatus::NeedsConfirmation, "{label}");
+        assert_eq!(result.pending, Some(click), "{label}");
+        assert!(result.steps.is_empty(), "{label}");
+        assert!(
+            browser.actions.lock().expect("action lock").is_empty(),
+            "{label}"
+        );
+    }
 }
 
 #[tokio::test]

@@ -337,6 +337,11 @@ pub(crate) fn is_irreversible(decision: &Decision) -> bool {
     let Some(target) = &decision.target else {
         return false;
     };
+    // An icon-only control has no observable intent. Links commonly have no
+    // accessible name in navigation menus, so keep those navigable.
+    if target.name.trim().is_empty() && target.role != "link" {
+        return true;
+    }
     let normalized = target
         .name
         .to_lowercase()
@@ -355,17 +360,30 @@ pub(crate) fn is_irreversible(decision: &Decision) -> bool {
     );
     [
         " buy ",
-        " buy now ",
         " purchase ",
         " pay ",
+        " checkout ",
         " place order ",
-        " confirm order ",
-        " confirm booking ",
+        " confirm ",
+        " book ",
+        " reserve ",
+        " submit ",
+        " transfer ",
+        " authorize ",
+        " approve ",
+        " accept ",
         " send ",
         " post ",
         " publish ",
+        " upload ",
+        " share ",
+        " invite ",
+        " sign ",
+        " subscribe ",
+        " unsubscribe ",
+        " save ",
         " delete ",
-        " remove account ",
+        " remove ",
     ]
     .iter()
     .any(|needle| label.contains(needle))

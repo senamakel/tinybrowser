@@ -82,8 +82,11 @@ decision. `DoneUnconfirmed` means Jev selected `DONE` without enough separate
 completion evidence. `NeedsConfirmation` means a likely consequential click
 was stopped before execution. `Blocked`, `Stuck`, and `Budget` identify other
 finite stops. A host should inspect visible evidence before reporting success
-and use its own confirmation mechanism for consequential actions. Label based
-click detection is a guard, not a complete authorization system.
+and use its own confirmation mechanism for consequential actions. The controller
+pauses on action labels such as submit, transfer, authorize, save, share, and
+delete, and on unnamed non-link controls such as icon buttons. It leaves
+ordinary navigation and search available. Label based click detection is a
+guard, not a complete authorization system.
 
 Every recorded decision includes provider model, latency, attempts, token
 usage, and request ID when available. To account for a run, sum usage from
