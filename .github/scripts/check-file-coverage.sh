@@ -3,6 +3,12 @@ set -euo pipefail
 
 minimum="${1:-90}"
 report="${2:-coverage.json}"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+workspace_root="$(cd "$script_dir/../.." && pwd -P)"
+if [[ "$(pwd -P)" != "$workspace_root" ]]; then
+  echo "run the coverage gate from the repository root: $workspace_root" >&2
+  exit 1
+fi
 
 if [[ -n "${TINYBROWSER_CHROME:-}" && ! -x "$TINYBROWSER_CHROME" ]]; then
   echo "configured TINYBROWSER_CHROME is not executable" >&2
@@ -20,5 +26,4 @@ TINYBROWSER_LIVE_TESTS=1 cargo llvm-cov \
   --json \
   --output-path "$report"
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
-"$script_dir/check-file-coverage-report.sh" "$minimum" "$report"
+"$script_dir/check-file-coverage-report.sh" "$minimum" "$report" "$workspace_root"

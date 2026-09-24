@@ -3,7 +3,9 @@ set -euo pipefail
 
 minimum="${1:-90}"
 report="${2:-coverage.json}"
-workspace_root="$(pwd -P)/"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+workspace="${3:-$script_dir/../..}"
+workspace_root="$(cd "$workspace" && pwd -P)/"
 # Gate handwritten production files under crates/<package>/src/. Integration
 # tests, colocated test.rs modules, generated macro code in vendor/, and other
 # worktrees are not production files. The browser tests still run and exercise
