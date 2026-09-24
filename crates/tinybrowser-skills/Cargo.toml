@@ -1,0 +1,20 @@
+[package]
+name = "tinybrowser-skills"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Loadable TinyBrowser agent skill and harness tool schemas."
+readme = "README.md"
+publish = false
+
+[dev-dependencies]
+# Tests decode the embedded tool schemas so malformed JSON cannot ship.
+serde_json = { workspace = true }
+
+[features]
+default = []
+
+[lints]
+workspace = true
