@@ -44,10 +44,6 @@ isolates the browser process.
 Use `https://.example.com` to admit one HTTPS host and its subdomains while
 refusing HTTP. A bare `.example.com` matches both schemes for hosts that need
 that behavior.
-Use `https://.*` only when the host explicitly permits navigation to HTTPS DNS
-names. It rejects IP literals and obvious local host suffixes, but does not
-validate the resolved address. This pattern is not a public-network or SSRF
-boundary; DNS and page subresource egress need network isolation for that.
 
 ## Installing
 

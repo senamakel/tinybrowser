@@ -13,7 +13,7 @@
 //! not a network sandbox: scripts and subresources can contact other hosts.
 //! A host needing a whole-network boundary isolates the browser process.
 
-use url::{Host, Url};
+use url::Url;
 
 use crate::error::{Error, Result};
 
@@ -93,9 +93,6 @@ pub(crate) fn check_allowed(url: &Url, allowed: &[String]) -> Result<()> {
 
     let permitted = allowed.iter().any(|entry| {
         let entry = entry.trim();
-        if entry == "https://.*" {
-            return url.scheme() == "https" && nonlocal_dns_host(url);
-        }
         if let Some((scheme, suffix)) = entry.split_once("://.") {
             return matches!(scheme, "http" | "https")
                 && url.scheme() == scheme
@@ -150,22 +147,4 @@ fn host_matches_suffix(host: &str, suffix: &str) -> bool {
         || host
             .to_ascii_lowercase()
             .ends_with(&format!(".{}", suffix.to_ascii_lowercase()))
-}
-
-/// The explicit allow-all pattern admits HTTPS DNS names, excluding obvious
-/// local suffixes and every IP literal. It does not classify DNS answers: a
-/// host needing a private-network boundary must enforce it at connection time.
-fn nonlocal_dns_host(url: &Url) -> bool {
-    match url.host() {
-        Some(Host::Domain(host)) => {
-            let normalized = host.trim_end_matches('.').to_ascii_lowercase();
-            !(normalized == "localhost"
-                || normalized.ends_with(".localhost")
-                || normalized == "local"
-                || normalized
-                    .rsplit_once('.')
-                    .is_some_and(|(_, tld)| tld == "local"))
-        }
-        Some(Host::Ipv4(_) | Host::Ipv6(_)) | None => false,
-    }
 }

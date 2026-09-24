@@ -151,41 +151,9 @@ fn a_scheme_qualified_dotted_entry_allows_only_https_on_that_host_tree() {
 }
 
 #[test]
-fn explicit_https_wildcard_blocks_http_local_names_and_all_ip_literals() {
+fn a_scheme_qualified_wildcard_is_not_a_supported_allowlist_entry() {
     let allowed = vec!["https://.*".to_owned()];
-    for url in ["https://example.com/", "https://docs.example.com/"] {
-        assert!(
-            check_allowed(&normalize_url(url).unwrap(), &allowed).is_ok(),
-            "{url}"
-        );
-    }
-    for url in [
-        "http://example.com/",
-        "https://localhost/",
-        "https://test.local/",
-        "https://127.0.0.1/",
-        "https://10.0.0.1/",
-        "https://169.254.1.2/",
-        "https://100.64.0.1/",
-        "https://198.19.0.1/",
-        "https://192.0.0.1/",
-        "https://8.8.8.8/",
-        "https://[::1]/",
-        "https://[fc00::1]/",
-        "https://[::ffff:127.0.0.1]/",
-    ] {
-        assert!(
-            check_allowed(&normalize_url(url).unwrap(), &allowed).is_err(),
-            "{url}"
-        );
-    }
-    assert!(
-        check_allowed(
-            &normalize_url("https://[2606:4700:4700::1111]/").unwrap(),
-            &allowed
-        )
-        .is_err()
-    );
+    assert!(check_allowed(&normalize_url("https://example.com/").unwrap(), &allowed).is_err());
 }
 
 #[test]

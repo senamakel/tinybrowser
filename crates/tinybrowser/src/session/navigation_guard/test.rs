@@ -45,23 +45,6 @@ fn scheme_qualified_host_tree_blocks_http_before_continue() {
 }
 
 #[test]
-fn public_https_wildcard_refuses_private_document_requests() {
-    let allowed = vec!["https://.*".to_owned()];
-    assert!(admitted(
-        &json!({"request":{"url":"https://example.com/"}}),
-        &allowed
-    ));
-    assert!(!admitted(
-        &json!({"request":{"url":"https://127.0.0.1/"}}),
-        &allowed
-    ));
-    assert!(!admitted(
-        &json!({"request":{"url":"http://example.com/"}}),
-        &allowed
-    ));
-}
-
-#[test]
 fn malformed_paused_request_fails_closed() {
     assert!(!admitted(&json!({"request":{}}), &allowed()));
     assert!(!admitted(
