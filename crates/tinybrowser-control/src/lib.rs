@@ -67,7 +67,6 @@ pub struct JevController {
 }
 
 /// Browser operations needed by the Jev loop. Hosts may implement this over `TinyBus`.
-#[allow(async_fn_in_trait)]
 pub trait BrowserControl {
     /// Read the current accessibility snapshot for a session.
     ///
@@ -75,11 +74,11 @@ pub trait BrowserControl {
     ///
     /// Returns [`BrowserControlError`] when the session is unavailable or the
     /// browser cannot capture its page.
-    async fn snapshot(
+    fn snapshot(
         &self,
         session: &SessionId,
         request: &SnapshotRequest,
-    ) -> std::result::Result<Snapshot, BrowserControlError>;
+    ) -> impl std::future::Future<Output = std::result::Result<Snapshot, BrowserControlError>> + Send;
 
     /// Perform one typed action in that session.
     ///
@@ -87,11 +86,11 @@ pub trait BrowserControl {
     ///
     /// Returns [`BrowserControlError`] when the action is refused, its target
     /// is stale, or the browser cannot complete it.
-    async fn perform(
+    fn perform(
         &self,
         session: &SessionId,
         action: &Action,
-    ) -> std::result::Result<ActionOutcome, BrowserControlError>;
+    ) -> impl std::future::Future<Output = std::result::Result<ActionOutcome, BrowserControlError>> + Send;
 }
 
 #[cfg(feature = "engine")]
