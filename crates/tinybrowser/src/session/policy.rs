@@ -94,11 +94,12 @@ pub(crate) fn check_allowed(url: &Url, allowed: &[String]) -> Result<()> {
     let permitted = allowed.iter().any(|entry| {
         let entry = entry.trim();
         if let Some((scheme, suffix)) = entry.split_once("://.") {
-            return matches!(scheme, "http" | "https")
-                && url.scheme() == scheme
+            return (scheme.eq_ignore_ascii_case("http") || scheme.eq_ignore_ascii_case("https"))
+                && url.scheme().eq_ignore_ascii_case(scheme)
                 && !suffix.is_empty()
                 && !suffix.contains('/')
                 && !suffix.contains(':')
+                && suffix.parse::<std::net::Ipv4Addr>().is_err()
                 && host_matches_suffix(host, suffix);
         }
         if let Some(suffix) = entry.strip_prefix('.') {

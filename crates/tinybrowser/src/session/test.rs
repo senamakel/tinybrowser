@@ -157,6 +157,23 @@ fn a_scheme_qualified_wildcard_is_not_a_supported_allowlist_entry() {
 }
 
 #[test]
+fn scheme_qualified_host_trees_accept_case_insensitive_scheme_but_no_ip_suffix() {
+    let allowed = vec!["HTTPS://.example.com".to_owned()];
+    assert!(
+        check_allowed(
+            &normalize_url("https://docs.example.com/").unwrap(),
+            &allowed
+        )
+        .is_ok()
+    );
+    for host in ["127.0.0.1", "8.8.8.8"] {
+        let allowed = vec![format!("https://.{host}")];
+        let url = normalize_url(&format!("https://{host}/")).unwrap();
+        assert!(check_allowed(&url, &allowed).is_err());
+    }
+}
+
+#[test]
 fn a_bare_host_entry_is_read_as_that_host() {
     // An operator who wrote `example.com` meant the site. Refusing to interpret
     // it would block everything instead, which is a worse failure than being
