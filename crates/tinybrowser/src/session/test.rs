@@ -125,6 +125,27 @@ fn a_dotted_entry_does_not_admit_a_lookalike_domain() {
 }
 
 #[test]
+fn a_scheme_qualified_dotted_entry_allows_only_https_on_that_host_tree() {
+    let allowed = vec!["https://.example.com".to_string()];
+    for url in ["https://example.com/", "https://docs.example.com/path"] {
+        assert!(
+            check_allowed(&normalize_url(url).unwrap(), &allowed).is_ok(),
+            "{url}"
+        );
+    }
+    for url in [
+        "http://example.com/",
+        "http://docs.example.com/",
+        "https://evil-example.com/",
+    ] {
+        assert!(
+            check_allowed(&normalize_url(url).unwrap(), &allowed).is_err(),
+            "{url}"
+        );
+    }
+}
+
+#[test]
 fn a_bare_host_entry_is_read_as_that_host() {
     // An operator who wrote `example.com` meant the site. Refusing to interpret
     // it would block everything instead, which is a worse failure than being

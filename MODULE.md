@@ -41,6 +41,10 @@ them. It is a navigation boundary, not a whole-network sandbox: subresources
 and scripts can still contact other hosts. A host needing that stronger boundary
 isolates the browser process.
 
+Use `https://.example.com` to admit one HTTPS host and its subdomains while
+refusing HTTP. A bare `.example.com` matches both schemes for hosts that need
+that behavior.
+
 ## Installing
 
 The archive contains one `.so`, `.dylib`, or `.dll` plus `modules.toml`. Keep

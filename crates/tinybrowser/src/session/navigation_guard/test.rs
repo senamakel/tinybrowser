@@ -32,6 +32,19 @@ fn blocks_redirects_to_other_domains_and_lookalikes() {
 }
 
 #[test]
+fn scheme_qualified_host_tree_blocks_http_before_continue() {
+    let allowed = vec!["https://.selenium.dev".to_owned()];
+    assert!(admitted(
+        &json!({"request":{"url":"https://www.selenium.dev/form"}}),
+        &allowed,
+    ));
+    assert!(!admitted(
+        &json!({"request":{"url":"http://www.selenium.dev/form"}}),
+        &allowed,
+    ));
+}
+
+#[test]
 fn malformed_paused_request_fails_closed() {
     assert!(!admitted(&json!({"request":{}}), &allowed()));
     assert!(!admitted(
