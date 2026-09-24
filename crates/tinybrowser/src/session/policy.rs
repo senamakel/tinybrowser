@@ -7,11 +7,11 @@
 //! on the page. Only the thing holding the browser is in a position to see every
 //! destination, and this module is that thing.
 //!
-//! What is enforced here is the first half — the destinations that arrive as
-//! requests. It is a guard rail against an agent wandering off, not a sandbox:
-//! an allowlist that a page's own JavaScript can still navigate around is worth
-//! having and worth being honest about. A host that needs a real boundary puts
-//! the browser in a network namespace that only reaches what it should.
+//! Explicit requests are checked here. Sessions with an allowlist also enable
+//! [`super::navigation_guard`] so Chrome pauses document requests before network
+//! egress, including clicks and redirects. This is still a navigation policy,
+//! not a network sandbox: scripts and subresources can contact other hosts.
+//! A host needing a whole-network boundary isolates the browser process.
 
 use url::Url;
 
