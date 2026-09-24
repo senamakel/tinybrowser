@@ -89,10 +89,10 @@ remain distinct and retain their sources.
 
 - One Jev request per decision, including an unconfirmed-completion retry and
   excluding provider retries internal to `tinyjevclient`.
-- For a task with one caller-supplied input, a successful fill removes `FILL`
-  from the offered operations while the observed page remains the same and the
-  filled ref still names that field. A changed or replaced page permits another
-  fill with that input.
+- For a task with one caller-supplied input, a successful fill establishes a
+  post-fill observation, even when entering the value changes the tree. `FILL`
+  stays unavailable while later observations match it and the filled ref still
+  names that field. A subsequent change or replacement permits another fill.
 - Only refs from the snapshot used for the decision may be acted on.
 - User-supplied input values are never used as Jev criterion identifiers. The
   model sees input names; the controller retains the values locally.

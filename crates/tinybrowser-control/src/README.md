@@ -15,15 +15,15 @@ coordinate, script, or text value.
 The runner then applies deterministic policy: accept completion only when the
 independent Noul clears the threshold, and give one bounded reconsideration
 without `DONE` when it does not. A newly selected click still uses a ref from
-the current snapshot and passes the irreversible-click gate. The runner also
-stops offering `FILL` after a single caller-supplied input was successfully
-entered while the resulting page snapshot remains the same and still contains
-the filled ref, so repeated fills cannot consume the unchanged-page budget. A
-changed page makes the input available again. It
-retries only browser errors the wire contract calls recoverable, stops after
-repeatedly unchanged snapshots, and enforces a finite decision budget. The
-browser engine still owns origin policy, current-ref validation, hit testing,
-and input dispatch.
+the current snapshot and passes the irreversible-click gate. A successful
+single-input fill establishes a new post-fill snapshot, including any tree
+change that shows the entered value. The runner stops offering `FILL` while
+later observations match that snapshot and still contain the filled ref; a
+subsequent page change makes the input available again. It also retries only
+browser errors the wire contract calls recoverable, stops after repeatedly
+unchanged snapshots, and enforces a finite decision budget. The browser engine
+still owns origin policy, current-ref validation, hit testing, and input
+dispatch.
 
 `test.rs` exercises policy and the loop with in-memory seams. The opt-in
 `tests/live_control.rs` test adds a real Chrome plus local page and mock System
