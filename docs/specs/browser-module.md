@@ -90,6 +90,20 @@ OpenSession -> Navigate -> Snapshot -> Perform -> Snapshot -> ... -> CloseSessio
   minutes. Eviction is oldest-first, because the newest is the one somebody is
   about to read.
 
+### Downloads
+
+- A session may configure one absolute download directory owned by the host.
+  TinyBrowser creates it when absent and never removes explicit downloads.
+- Chrome download events are retained as typed handles. `ListDownloads`
+  inspects them; `WaitDownload` returns each completed or cancelled handle once
+  even when the event arrived before the wait began.
+- A completed handle reports Chrome's byte counts and expected local path. The
+  host still verifies the file's checksum, signature, and type before opening
+  it.
+- A harness races external completion handles against a Jev loop. Page
+  snapshots cannot prove a background download completed, so continuing to ask
+  Jev after the event is waste rather than additional intelligence.
+
 ### Errors
 
 - Every failure carries a stable name from `tinybrowser_bus::errors`, with the

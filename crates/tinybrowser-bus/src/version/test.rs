@@ -6,7 +6,7 @@ use super::{CONTRACT_VERSION, binds, is_compatible};
 
 #[test]
 fn the_shipped_contract_version_is_pinned() {
-    assert_eq!(CONTRACT_VERSION, (1, 0));
+    assert_eq!(CONTRACT_VERSION, (1, 1));
 }
 
 #[test]
@@ -26,6 +26,7 @@ fn an_older_minor_on_the_module_side_is_rejected() {
     // may not be served.
     assert!(!binds((1, 4), (1, 2)));
     assert!(binds((1, 4), (1, 4)));
+    assert!(!is_compatible((1, 0)));
 }
 
 #[test]

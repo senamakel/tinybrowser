@@ -85,6 +85,17 @@ pub mod methods {
     /// already gone succeeds, for the same reason [`CLOSE_SESSION`] does.
     pub const RELEASE_OUTPUT: &str = "ReleaseOutput";
 
+    /// Lists retained downloads for one browser session.
+    ///
+    /// Takes a [`crate::SessionId`] and returns a `Vec<`[`crate::DownloadInfo`]`>`.
+    pub const LIST_DOWNLOADS: &str = "ListDownloads";
+
+    /// Waits for the next terminal download not returned by an earlier wait.
+    ///
+    /// Takes a [`crate::SessionId`] and [`crate::DownloadWaitRequest`], and
+    /// returns a [`crate::DownloadInfo`].
+    pub const WAIT_DOWNLOAD: &str = "WaitDownload";
+
     /// Reports the contract version the module serves.
     ///
     /// Takes nothing and returns `(u32, u32)`. A host compares it with
@@ -108,6 +119,8 @@ pub const METHODS: &[&str] = &[
     methods::SCREENSHOT,
     methods::READ_OUTPUT,
     methods::RELEASE_OUTPUT,
+    methods::LIST_DOWNLOADS,
+    methods::WAIT_DOWNLOAD,
     methods::CONTRACT_VERSION,
 ];
 
