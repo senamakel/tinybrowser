@@ -419,9 +419,15 @@ async fn an_unconfirmed_done_reconsiders_the_visible_submit_button() {
     assert_eq!(result.steps[0].decision.operation, Operation::Fill);
     assert_eq!(result.steps[1].decision.operation, Operation::Click);
     assert_eq!(browser.actions.lock().expect("actions").len(), 2);
+    let contexts = decisions.context_flags.lock().expect("context flags lock");
+    assert_eq!(contexts.len(), 4);
+    assert_eq!(contexts[0], (false, false), "initial Fill");
+    assert_eq!(contexts[1], (false, true), "unconfirmed Done after Fill");
+    assert_eq!(contexts[2], (true, true), "Click on the still-filled page");
     assert_eq!(
-        *decisions.context_flags.lock().expect("context flags lock"),
-        [(false, false), (false, true), (true, true), (false, false)]
+        contexts[3],
+        (false, false),
+        "confirmed Done after title change"
     );
 }
 
