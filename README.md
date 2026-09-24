@@ -27,6 +27,46 @@ in the host.
 This is the third option: the browser lives behind a wire. The host keeps a
 proxy and a `serde` derive.
 
+## Agent quickstart
+
+If your agent already has the `browser_task` and `browser` tools, load the
+[TinyBrowser skill](crates/tinybrowser-skills/skills/tinybrowser/SKILL.md) and
+start with an observable result:
+
+```json
+{
+  "goal": "Find visible one-way flight options from Mumbai (BOM) to Goa Dabolim (GOI). Stop at the listings; do not book or purchase.",
+  "start_url": "https://www.trip.com/flights/city-bom-airport-goi/",
+  "allowed_origins": ["trip.com"],
+  "max_steps": 12
+}
+```
+
+Give exact form values in `inputs` when needed. On `done_unconfirmed`, `stuck`,
+or `blocked`, inspect the page with `browser` before reporting an outcome.
+For a download, wait for its download handle; a page snapshot alone does not
+show that the file finished. The skill explains each status and when to ask the
+user before a consequential action.
+
+If you are setting up TinyBrowser for an agent, clone with submodules (or run
+`git submodule update --init --recursive` in an existing clone), install Chrome
+or Chromium, and run this credential-free local proof:
+
+```sh
+TINYBROWSER_LIVE_TESTS=1 cargo test -p tinybrowser-control --test live_control \
+  live_controller_clicks_and_confirms_completion -- --nocapture
+cargo run -p tinybrowser-skills --example list_assets
+```
+
+The first command drives a real browser with a local mock Jev server. The
+second lists the skill and JSON schemas a harness can load. This repository
+does not install `browser_task` into your agent automatically; the host must
+register the schemas, dispatch tool calls to the browser and controller, own
+the session and provider credentials, and enforce its time and cost limits.
+The [skill package README](crates/tinybrowser-skills/README.md) is the setup
+checklist, and [How Jev controls TinyBrowser](docs/jev-integration.md) explains
+the runtime flow.
+
 ## What an agent sees
 
 A snapshot, not HTML:
