@@ -337,9 +337,9 @@ pub(crate) fn is_irreversible(decision: &Decision) -> bool {
     let Some(target) = &decision.target else {
         return false;
     };
-    // An icon-only control has no observable intent. Links commonly have no
-    // accessible name in navigation menus, so keep those navigable.
-    if target.name.trim().is_empty() && target.role != "link" {
+    // An unnamed ref has no observable intent, including when its role is link:
+    // the snapshot does not carry an href or prove that clicking only navigates.
+    if target.name.trim().is_empty() {
         return true;
     }
     let normalized = target

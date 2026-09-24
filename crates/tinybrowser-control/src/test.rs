@@ -347,6 +347,7 @@ fn irreversible_policy_covers_consequential_clicks_and_unlabeled_controls() {
         "Save changes",
         "Share document",
         "Invite member",
+        "Submit search",
     ] {
         assert!(
             policy::is_irreversible(&decision(
@@ -372,7 +373,7 @@ fn irreversible_policy_covers_consequential_clicks_and_unlabeled_controls() {
         Operation::Click,
         Some(element("e2", "button", "Search"))
     )));
-    assert!(!policy::is_irreversible(&decision(
+    assert!(policy::is_irreversible(&decision(
         Operation::Click,
         Some(element("e2", "link", ""))
     )));
@@ -526,8 +527,15 @@ async fn the_runner_accepts_only_independently_confirmed_done() {
 
 #[tokio::test]
 async fn the_runner_stops_before_an_irreversible_click() {
-    for label in ["Delete account", "Submit", "Transfer", "Authorize", ""] {
-        let click = decision(Operation::Click, Some(element("e8", "button", label)));
+    for (role, label) in [
+        ("button", "Delete account"),
+        ("button", "Submit"),
+        ("button", "Transfer"),
+        ("button", "Authorize"),
+        ("button", ""),
+        ("link", ""),
+    ] {
+        let click = decision(Operation::Click, Some(element("e8", role, label)));
         let browser = FakeBrowser::new([snapshot()]);
         let result = controller()
             .run_with(
