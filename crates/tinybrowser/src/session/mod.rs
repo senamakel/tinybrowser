@@ -88,6 +88,7 @@ pub(crate) struct Session {
     /// The page target, kept so it can be closed without closing the browser a
     /// host lent us.
     target: String,
+    context: String,
     endpoint: String,
     /// The browser this module started, if it started one. A session that
     /// attached to somebody else's browser leaves it running.
@@ -126,10 +127,19 @@ impl Session {
         // means the session owns exactly one page and knows which it is —
         // adopting whatever tab happened to exist would make an attached
         // session start driving a page somebody else is using.
+        let context_result = client
+            .send(
+                "Target.createBrowserContext",
+                json!({}),
+                None,
+                COMMAND_TIMEOUT,
+            )
+            .await?;
+        let context = string_field(&context_result, "browserContextId")?;
         let created = client
             .send(
                 "Target.createTarget",
-                json!({ "url": "about:blank" }),
+                json!({ "url": "about:blank", "browserContextId": context }),
                 None,
                 COMMAND_TIMEOUT,
             )
@@ -146,15 +156,16 @@ impl Session {
             .await?;
         let page = string_field(&attached, "sessionId")?;
 
-        let downloads = downloads::DownloadTracker::new(options.download_dir.as_deref());
+        let downloads = downloads::DownloadTracker::new(options.download_dir.as_deref(), &target);
         let download_task =
-            downloads::DownloadTracker::spawn(Arc::clone(&downloads), client.events());
+            downloads::DownloadTracker::spawn(Arc::clone(&downloads), client.download_events());
         let session = Self {
             id,
             options,
             client,
             page,
             target,
+            context,
             endpoint,
             launched: Mutex::new(launched),
             refs: Mutex::new(RefMap::default()),
@@ -216,12 +227,13 @@ impl Session {
                 Error::invalid_input(format!("download directory could not be created: {error}"))
             })?;
             json!({
-                "behavior": "allow",
+                "behavior": "allowAndName",
                 "downloadPath": directory,
                 "eventsEnabled": true,
+                "browserContextId": self.context,
             })
         } else {
-            json!({ "behavior": "default", "eventsEnabled": true })
+            return Ok(());
         };
         self.send_browser("Browser.setDownloadBehavior", download_behavior)
             .await?;
@@ -737,12 +749,22 @@ impl Session {
     /// Errors are swallowed: this is the teardown path, and a browser that has
     /// already gone is the outcome being asked for.
     pub(crate) async fn close(&self) {
+        self.downloads.close().await;
         self.download_task.abort();
         let _ = self
             .client
             .send(
                 "Target.closeTarget",
                 json!({ "targetId": self.target }),
+                None,
+                COMMAND_TIMEOUT,
+            )
+            .await;
+        let _ = self
+            .client
+            .send(
+                "Target.disposeBrowserContext",
+                json!({ "browserContextId": self.context }),
                 None,
                 COMMAND_TIMEOUT,
             )

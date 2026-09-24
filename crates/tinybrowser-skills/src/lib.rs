@@ -4,6 +4,21 @@
 //! small tool schemas and operating guidance a main agent needs to use those
 //! capabilities reliably. Keeping them versioned together prevents a globally
 //! installed skill from describing tools older or newer than the harness.
+//!
+//! The primary entry points are [`skill_assets`] and [`tool_schema`].
+//!
+//! # Example
+//!
+//! ```
+//! use tinybrowser_skills::{skill_assets, tool_schema};
+//!
+//! assert!(!skill_assets().is_empty());
+//! assert!(tool_schema("browser").is_some());
+//! ```
+//!
+//! This crate does not hold browser sessions, provider calls, or credentials.
+//! The harness owns those runtime concerns because this crate only packages
+//! schemas and operating guidance.
 
 /// The loadable `TinyBrowser` skill in Markdown form.
 pub const TINYBROWSER_SKILL: &str = include_str!("../skills/tinybrowser/SKILL.md");

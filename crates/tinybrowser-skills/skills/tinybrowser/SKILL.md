@@ -62,12 +62,13 @@ dates, contact details, payment data, or authentication secrets.
 
 ## Downloads and external completion
 
-A download can finish without changing the page. The harness should start
-`WaitDownload` before or concurrently with the Jev loop and race the two. A
-completed or cancelled `DownloadInfo` is authoritative browser state and should
-stop the decision loop immediately; do not keep asking Jev whether an unchanged
-page means the file finished. `ListDownloads` inspects retained handles without
-consuming them.
+A download can finish without changing the page. The harness should track the
+downloads required by the task, start `WaitDownload` before or concurrently with
+the Jev loop, and inspect retained handles with `ListDownloads` without
+consuming them. A completed or cancelled handle is authoritative only for a
+tracked required download; keep the loop running until every required download
+and the task's completion criteria are met. Do not let an unrelated retained
+handle or the first of several required downloads end the task.
 
 The host—not the model—chooses the absolute download directory when opening the
 session. A completed handle reports the expected path and byte counts. Verify

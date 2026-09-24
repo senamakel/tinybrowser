@@ -54,15 +54,24 @@ async fn live_tinyhumans_downloads_openhuman_for_apple_silicon() {
         wait_ms: 750,
         ..ControlLimits::default()
     });
-    let download = tokio::select! {
-        download = browser.wait_download(
+    let result = controller
+        .run(&browser, &session.id, &task)
+        .await
+        .expect("controller run");
+    println!(
+        "controller status={:?} steps={}",
+        result.status,
+        result.steps.len()
+    );
+    let download = browser
+        .wait_download(
             &session.id,
-            &DownloadWaitRequest { timeout_ms: Some(180_000) },
-        ) => download.expect("download handle"),
-        result = controller.run(&browser, &session.id, &task) => {
-            panic!("controller stopped before a download completed: {result:?}")
-        }
-    };
+            &DownloadWaitRequest {
+                timeout_ms: Some(180_000),
+            },
+        )
+        .await
+        .expect("download handle");
 
     assert_eq!(download.state, DownloadState::Completed);
     let downloaded = PathBuf::from(download.path.expect("configured download path"));

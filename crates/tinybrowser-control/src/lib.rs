@@ -11,6 +11,12 @@
 //! It selects only refs minted by the current accessibility snapshot and names
 //! of values the caller already supplied.
 //!
+//! This crate does not own session lifecycle: [`JevController::run`] neither
+//! opens nor closes sessions. Origin policy, current-ref validation, hit testing,
+//! and input dispatch remain in `tinybrowser`; provider-specific transport stays
+//! with the caller. Keeping those responsibilities outside preserves this crate's
+//! provider-neutral control role.
+//!
 //! # Example
 //!
 //! ```no_run

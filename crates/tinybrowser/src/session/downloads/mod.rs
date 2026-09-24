@@ -24,12 +24,24 @@ struct DownloadStore {
     downloads: BTreeMap<DownloadId, DownloadInfo>,
     terminal: VecDeque<DownloadId>,
     queued: HashSet<DownloadId>,
+    closed: bool,
 }
 
 impl DownloadStore {
-    fn apply(&mut self, event: &CdpEvent, directory: Option<&Path>) -> bool {
+    fn apply(&mut self, event: &CdpEvent, directory: Option<&Path>, frame_id: &str) -> bool {
         match event.method.as_str() {
-            "Browser.downloadWillBegin" => self.begin(&event.params, directory),
+            "Browser.downloadWillBegin" => {
+                if event
+                    .params
+                    .get("frameId")
+                    .and_then(serde_json::Value::as_str)
+                    == Some(frame_id)
+                {
+                    self.begin(&event.params, directory)
+                } else {
+                    false
+                }
+            }
             "Browser.downloadProgress" => self.progress(&event.params),
             _ => false,
         }
@@ -49,7 +61,7 @@ impl DownloadStore {
             .and_then(serde_json::Value::as_str)
             .unwrap_or_default()
             .to_owned();
-        let path = directory.and_then(|directory| expected_path(directory, &suggested_filename));
+        let path = directory.map(|directory| directory.join(guid));
         self.downloads.insert(
             id.clone(),
             DownloadInfo {
@@ -75,22 +87,6 @@ impl DownloadStore {
             return false;
         };
         let id = DownloadId::new(guid);
-        if !self.downloads.contains_key(&id) {
-            self.next_sequence = self.next_sequence.saturating_add(1);
-            self.downloads.insert(
-                id.clone(),
-                DownloadInfo {
-                    sequence: self.next_sequence,
-                    id: id.clone(),
-                    url: String::new(),
-                    suggested_filename: String::new(),
-                    state: DownloadState::InProgress,
-                    received_bytes: 0,
-                    total_bytes: None,
-                    path: None,
-                },
-            );
-        }
         let Some(info) = self.downloads.get_mut(&id) else {
             return false;
         };
@@ -118,6 +114,10 @@ impl DownloadStore {
         downloads.sort_by_key(|info| info.sequence);
         downloads
     }
+
+    fn close(&mut self) {
+        self.closed = true;
+    }
 }
 
 /// One session's retained downloads and waiter notification.
@@ -126,14 +126,16 @@ pub(crate) struct DownloadTracker {
     store: Mutex<DownloadStore>,
     notify: Notify,
     directory: Option<PathBuf>,
+    frame_id: String,
 }
 
 impl DownloadTracker {
-    pub(crate) fn new(directory: Option<&str>) -> Arc<Self> {
+    pub(crate) fn new(directory: Option<&str>, frame_id: &str) -> Arc<Self> {
         Arc::new(Self {
             store: Mutex::new(DownloadStore::default()),
             notify: Notify::new(),
             directory: directory.map(PathBuf::from),
+            frame_id: frame_id.to_owned(),
         })
     }
 
@@ -148,15 +150,16 @@ impl DownloadTracker {
                     Err(broadcast::error::RecvError::Lagged(_)) => continue,
                     Err(broadcast::error::RecvError::Closed) => break,
                 };
-                let changed = tracker
-                    .store
-                    .lock()
-                    .await
-                    .apply(&event, tracker.directory.as_deref());
+                let changed = tracker.store.lock().await.apply(
+                    &event,
+                    tracker.directory.as_deref(),
+                    &tracker.frame_id,
+                );
                 if changed {
                     tracker.notify.notify_waiters();
                 }
             }
+            tracker.close().await;
         })
     }
 
@@ -169,20 +172,25 @@ impl DownloadTracker {
             loop {
                 let notified = self.notify.notified();
                 if let Some(info) = self.store.lock().await.take_terminal() {
-                    return info;
+                    return Ok(info);
+                }
+                if self.store.lock().await.closed {
+                    return Err(Error::connection_lost(
+                        "download monitor stopped".to_owned(),
+                    ));
                 }
                 notified.await;
             }
         };
         tokio::time::timeout(timeout, wait)
             .await
-            .map_err(|_| Error::timeout("download", duration_ms(timeout)))
+            .map_err(|_| Error::timeout("download", duration_ms(timeout)))?
     }
-}
 
-fn expected_path(directory: &Path, suggested_filename: &str) -> Option<PathBuf> {
-    let filename = Path::new(suggested_filename).file_name()?;
-    (!filename.is_empty()).then(|| directory.join(filename))
+    pub(crate) async fn close(&self) {
+        self.store.lock().await.close();
+        self.notify.notify_waiters();
+    }
 }
 
 fn byte_count(value: Option<&serde_json::Value>) -> u64 {

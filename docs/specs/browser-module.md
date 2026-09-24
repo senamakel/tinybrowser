@@ -8,7 +8,7 @@ terms an agent can act on.
 
 ## What a host gets
 
-One interface, `ai.tinyhumans.tinybrowser.Browser`, with twelve members listed
+One interface, `ai.tinyhumans.tinybrowser.Browser`, with fourteen members listed
 in `tinybrowser_bus::names::METHODS`. The vocabulary is published as
 `tinybrowser-bus`, a two-dependency crate with no transport, so the cost to the
 host of linking it is a `serde` derive.

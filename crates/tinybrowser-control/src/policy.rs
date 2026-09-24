@@ -337,7 +337,22 @@ pub(crate) fn is_irreversible(decision: &Decision) -> bool {
     let Some(target) = &decision.target else {
         return false;
     };
-    let label = format!(" {} ", target.name.to_lowercase());
+    let normalized = target
+        .name
+        .to_lowercase()
+        .chars()
+        .map(|character| {
+            if character.is_alphanumeric() {
+                character
+            } else {
+                ' '
+            }
+        })
+        .collect::<String>();
+    let label = format!(
+        " {} ",
+        normalized.split_whitespace().collect::<Vec<_>>().join(" ")
+    );
     [
         " buy ",
         " buy now ",

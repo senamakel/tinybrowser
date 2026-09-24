@@ -326,6 +326,10 @@ fn irreversible_policy_is_narrow_and_click_only() {
         Operation::Click,
         Some(element("e1", "button", "Place order"))
     )));
+    assert!(policy::is_irreversible(&decision(
+        Operation::Click,
+        Some(element("e1", "button", "Place order:"))
+    )));
     assert!(!policy::is_irreversible(&decision(
         Operation::Click,
         Some(element("e2", "link", "Order history"))
