@@ -22,9 +22,9 @@ use std::sync::Arc;
 
 use serde_json::Value;
 use tinybrowser_bus::{
-    ActionOutcome, EvaluateRequest, NavigateRequest, OutputChunk, OutputId, OutputRef, PageState,
-    PageText, ReadRequest, ScreenshotRequest, SessionId, SessionInfo, SessionOptions, Snapshot,
-    SnapshotRequest,
+    ActionOutcome, DownloadInfo, DownloadWaitRequest, EvaluateRequest, NavigateRequest,
+    OutputChunk, OutputId, OutputRef, PageState, PageText, ReadRequest, ScreenshotRequest,
+    SessionId, SessionInfo, SessionOptions, Snapshot, SnapshotRequest,
 };
 use tokio::sync::{Mutex, RwLock};
 
@@ -311,6 +311,33 @@ impl Browser {
     pub async fn release_output(&self, id: &OutputId) -> Result<()> {
         self.outputs.lock().await.release(id);
         Ok(())
+    }
+
+    /// Every download event retained for a session, in observation order.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::NoSuchSession`] when `id` is not open.
+    pub async fn list_downloads(&self, id: &SessionId) -> Result<Vec<DownloadInfo>> {
+        Ok(self.session(id).await?.list_downloads().await)
+    }
+
+    /// Wait for the next completed or cancelled download not returned by an
+    /// earlier wait.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::NoSuchSession`] when `id` is not open and
+    /// [`Error::Timeout`] when no terminal download arrives by the deadline.
+    pub async fn wait_download(
+        &self,
+        id: &SessionId,
+        request: &DownloadWaitRequest,
+    ) -> Result<DownloadInfo> {
+        self.session(id)
+            .await?
+            .wait_download(request.timeout_ms)
+            .await
     }
 
     /// Closes every session.

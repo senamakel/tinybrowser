@@ -2,3 +2,11 @@
 	path = vendor/tinybus
 	url = https://github.com/tinyhumansai/tinybus
 	branch = main
+[submodule "vendor/agent-browser"]
+	path = vendor/agent-browser
+	url = https://github.com/vercel-labs/agent-browser.git
+	branch = main
+[submodule "vendor/tinyjevclient"]
+	path = vendor/tinyjevclient
+	url = https://github.com/tinyhumansai/tinyjevclient.git
+	branch = main

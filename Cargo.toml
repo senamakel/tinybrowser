@@ -7,8 +7,9 @@ resolver = "3"
 # would make one crate structurally different from the rest for no reason other
 # than history, and it is the arrangement this template moved away from.
 members = ["crates/*"]
-# `vendor/` holds the pinned TinyBus submodule, which is its own workspace with
-# its own lockfile. `worktrees/` holds `git worktree` checkouts of this same
+# `vendor/` holds pinned upstream submodules, some of which are their own Cargo
+# workspaces with their own lockfiles. `worktrees/` holds `git worktree`
+# checkouts of this same
 # repository; each contains a full copy of this manifest and every crate under
 # it, so without this entry cargo walks into them and reports duplicate
 # packages.
@@ -31,6 +32,8 @@ repository = "https://github.com/tinyhumansai/tinybrowser"
 # release, and a pinned requirement here would stop resolving the moment it did.
 # Nothing in this workspace is published, so the path is the whole address.
 tinybrowser-bus = { path = "crates/tinybrowser-bus" }
+# The in-process browser engine driven by the optional agentic control crate.
+tinybrowser = { path = "crates/tinybrowser" }
 # TinyBus defines the message types, interface macro, and frozen module ABI
 # used by the generated integration. Socket and CLI features are unnecessary
 # here.
@@ -41,6 +44,10 @@ tinybus = { path = "vendor/tinybus/crates/tinybus", version = "0.1.0", default-f
 # The module-side SDK owns the isolated runtime and exports the ABI entrypoints
 # required by TinyBus's dynamic loader.
 tinybus-module = { path = "vendor/tinybus/crates/tinybus-module", version = "0.1.0" }
+# Jev makes bounded, typed decisions for the agentic browser-control loop. It is
+# pinned by the `vendor/tinyjevclient` gitlink so its wire behavior is reviewed
+# together with each update.
+tinyjevclient = { path = "vendor/tinyjevclient/crates/tinyjevclient" }
 # Derive macros for the crate-wide error type in `crates/template/src/error/`.
 # Every dependency entry should carry a comment like this one saying why it is
 # here.
