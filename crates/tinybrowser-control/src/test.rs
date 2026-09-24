@@ -127,37 +127,39 @@ impl FakeBrowser {
 }
 
 impl BrowserControl for FakeBrowser {
-    async fn snapshot(
+    fn snapshot(
         &self,
         _session: &SessionId,
         _request: &tinybrowser::SnapshotRequest,
-    ) -> tinybrowser::Result<Snapshot> {
-        Ok(self
+    ) -> impl std::future::Future<Output = tinybrowser::Result<Snapshot>> {
+        std::future::ready(Ok(self
             .snapshots
             .lock()
             .expect("snapshot lock")
             .pop_front()
-            .expect("a snapshot for every observation"))
+            .expect("a snapshot for every observation")))
     }
 
-    async fn perform(
+    fn perform(
         &self,
         _session: &SessionId,
         action: &Action,
-    ) -> tinybrowser::Result<ActionOutcome> {
+    ) -> impl std::future::Future<Output = tinybrowser::Result<ActionOutcome>> {
         self.actions
             .lock()
             .expect("action lock")
             .push(action.clone());
-        self.outcomes
-            .lock()
-            .expect("outcome lock")
-            .pop_front()
-            .unwrap_or_else(|| {
-                Ok(ActionOutcome::acted(PageState::new(
-                    "https://example.com/search",
-                )))
-            })
+        std::future::ready(
+            self.outcomes
+                .lock()
+                .expect("outcome lock")
+                .pop_front()
+                .unwrap_or_else(|| {
+                    Ok(ActionOutcome::acted(PageState::new(
+                        "https://example.com/search",
+                    )))
+                }),
+        )
     }
 }
 
@@ -171,17 +173,19 @@ impl FakeDecisions {
 }
 
 impl DecisionSource for FakeDecisions {
-    async fn decide(
+    fn decide(
         &self,
         _task: &TaskRequest,
         _snapshot: &Snapshot,
         _history: &[StepRecord],
-    ) -> Result<Decision> {
-        self.0
-            .lock()
-            .expect("decision lock")
-            .pop_front()
-            .expect("a decision for every step")
+    ) -> impl std::future::Future<Output = Result<Decision>> {
+        std::future::ready(
+            self.0
+                .lock()
+                .expect("decision lock")
+                .pop_front()
+                .expect("a decision for every step"),
+        )
     }
 }
 
