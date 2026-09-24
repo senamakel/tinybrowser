@@ -32,6 +32,15 @@ fn admitted(params: &Value, allowed: &[String]) -> bool {
     policy::check_allowed(&url, allowed).is_ok()
 }
 
+/// Identify a paused request belonging to this page. Malformed events are
+/// ignored, leaving any unidentifiable request paused rather than allowing it.
+fn request_id<'a>(event: &'a CdpEvent, page_session: &str) -> Option<&'a str> {
+    if event.method != "Fetch.requestPaused" || event.session_id.as_deref() != Some(page_session) {
+        return None;
+    }
+    event.params.get("requestId").and_then(Value::as_str)
+}
+
 /// Guard one attached page's document requests until its session closes.
 pub(super) fn spawn(
     client: &Arc<CdpClient>,
@@ -51,12 +60,7 @@ pub(super) fn spawn(
                 }
                 Err(broadcast::error::RecvError::Closed) => break,
             };
-            if event.method != "Fetch.requestPaused"
-                || event.session_id.as_deref() != Some(&page_session)
-            {
-                continue;
-            }
-            let Some(request_id) = event.params.get("requestId").and_then(Value::as_str) else {
+            let Some(request_id) = request_id(&event, &page_session) else {
                 continue;
             };
             let Some(client) = weak.upgrade() else { break };

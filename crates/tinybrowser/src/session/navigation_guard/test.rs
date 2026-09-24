@@ -1,6 +1,7 @@
 use serde_json::json;
 
-use super::admitted;
+use super::{admitted, request_id};
+use crate::cdp::CdpEvent;
 
 fn allowed() -> Vec<String> {
     vec![".selenium.dev".to_owned()]
@@ -37,4 +38,20 @@ fn malformed_paused_request_fails_closed() {
         &json!({"request":{"url":"not a url"}}),
         &allowed()
     ));
+}
+
+#[test]
+fn only_this_pages_well_formed_paused_requests_are_handled() {
+    let mut event = CdpEvent {
+        method: "Fetch.requestPaused".into(),
+        session_id: Some("page-a".into()),
+        params: json!({"requestId":"request-1"}),
+    };
+    assert_eq!(request_id(&event, "page-a"), Some("request-1"));
+    assert_eq!(request_id(&event, "page-b"), None);
+    event.method = "Page.loadEventFired".into();
+    assert_eq!(request_id(&event, "page-a"), None);
+    event.method = "Fetch.requestPaused".into();
+    event.params = json!({});
+    assert_eq!(request_id(&event, "page-a"), None);
 }
