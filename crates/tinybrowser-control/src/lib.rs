@@ -138,6 +138,18 @@ fn completed_single_input_on_page(
         })
 }
 
+fn fill_stayed_on_page(
+    decision: &Decision,
+    outcome: &StepOutcome,
+    before: &Snapshot,
+    after: &Snapshot,
+) -> bool {
+    decision.operation == Operation::Fill
+        && matches!(outcome, StepOutcome::Acted)
+        && before.url == after.url
+        && before.title == after.title
+}
+
 impl DecisionSource for JevController {
     async fn decide(
         &self,
@@ -292,7 +304,7 @@ impl JevController {
             let after = browser.snapshot(session, &snapshot_request).await?;
             let changed = policy::page_changed(&snapshot, &after);
             unchanged = policy::next_unchanged(unchanged, decision.operation, changed);
-            if decision.operation == Operation::Fill && matches!(&outcome, StepOutcome::Acted) {
+            if fill_stayed_on_page(&decision, &outcome, &snapshot, &after) {
                 filled_observation =
                     Some((after.url.clone(), after.title.clone(), after.tree.clone()));
             } else if changed {

@@ -494,6 +494,40 @@ async fn filling_one_of_multiple_inputs_keeps_fill_available() {
 }
 
 #[tokio::test]
+async fn a_fill_that_navigates_keeps_the_input_available_on_the_new_page() {
+    let before = snapshot();
+    let mut after = before.clone();
+    after.url = "https://example.com/next-form".to_owned();
+    after.title = "Next form".to_owned();
+    let mut fill = decision(Operation::Fill, Some(element("e1", "textbox", "Query")));
+    fill.input_name = Some("query".to_owned());
+    let decisions = FakeDecisions::new([fill, decision(Operation::Blocked, None)]);
+    let task = TaskRequest::new("fill both forms")
+        .with_inputs(BTreeMap::from([("query".to_owned(), "rust".to_owned())]));
+    let result = controller()
+        .run_with(
+            &FakeBrowser::new([before, after.clone()]),
+            &decisions,
+            &SessionId::new("session"),
+            &task,
+        )
+        .await
+        .expect("task result");
+
+    assert_eq!(result.status, TaskStatus::Blocked);
+    assert_eq!(
+        *decisions.context_flags.lock().expect("context flags lock"),
+        [(false, false), (false, false)]
+    );
+    let next_request = policy::build_request(&task, &after, &result.steps, false, false)
+        .expect("input remains available");
+    let Question::Choice(operations) = &next_request.questions["operation"] else {
+        panic!("operation must be a choice");
+    };
+    assert!(operations.criteria.contains_key("FILL"));
+}
+
+#[tokio::test]
 async fn an_unconfirmed_form_goal_selects_the_current_submit_ref_and_preserves_approval() {
     let before = Snapshot {
         url: "https://www.selenium.dev/selenium/web/web-form.html".to_owned(),
