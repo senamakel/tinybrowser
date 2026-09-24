@@ -40,6 +40,9 @@ tokio = { workspace = true, features = ["process", "io-util", "fs", "sync", "net
 tokio-tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"] }
 # `SplitSink`/`StreamExt` over the WebSocket, and nothing else.
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+# Live download tests need an isolated explicit destination that disappears
+# after the browser closes.
+tempfile = "3"
 # Chrome publishes its per-target WebSocket URLs over an HTTP endpoint
 # (`/json/version`, `/json/list`); this fetches them. `rustls` rather than
 # native TLS so the module does not link OpenSSL into its host.

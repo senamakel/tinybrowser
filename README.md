@@ -56,6 +56,7 @@ position.
 | `ReadPage` | The page as text, Markdown, or serialized DOM |
 | `Evaluate` | JavaScript in, value out |
 | `Screenshot` + `ReadOutput` / `ReleaseOutput` | An image, collected in chunks |
+| `ListDownloads` / `WaitDownload` | Retained Chrome download events and completed-file handles |
 | `ContractVersion` | What a host checks before its first real call |
 
 Every name and payload is published by `tinybrowser-bus`, a two-dependency crate
@@ -99,6 +100,48 @@ cargo run -p tinybrowser --example over_the_bus -- \
 `docs/openhuman-integration.md` covers wiring it into an OpenHuman host and the
 agent-facing tool that sits on top.
 
+### Agentic control with Jev
+
+`tinybrowser-control` is the optional fast decision layer. It keeps
+`tinybrowser-bus` and the browser engine model-free, while one Jev request per
+step chooses an operation and speculative targets from the current snapshot.
+An independent completion answer checks `DONE`; deterministic Rust code owns
+step limits, unchanged-page detection, and the stop before likely irreversible
+clicks.
+
+```rust,no_run
+use std::collections::BTreeMap;
+use tinybrowser_control::{JevController, TaskRequest};
+use tinyjevclient::Client;
+
+# async fn control(browser: &tinybrowser::Browser, session: &tinybrowser::SessionId)
+#     -> Result<(), Box<dyn std::error::Error>> {
+let task = TaskRequest::new("Search for TinyBrowser")
+    .with_inputs(BTreeMap::from([("search query".into(), "TinyBrowser".into())]));
+let result = JevController::new(Client::from_env()?)
+    .run(browser, session, &task)
+    .await?;
+println!("{:?}", result.status);
+# Ok(())
+# }
+```
+
+The controller never accepts model-generated selectors, coordinates, scripts,
+or form text. It maps closed choices back to current snapshot refs and values
+the caller supplied locally. See the
+[`Jev browser-control specification`](docs/specs/jev-browser-control.md) for the
+full policy and stop conditions.
+
+`tinybrowser-skills` packages the loadable agent instructions and JSON tool
+schemas for `browser_task` and the low-level `browser` escape hatch. Its
+compiled examples show how a harness discovers and installs those versioned
+assets:
+
+```sh
+cargo run -p tinybrowser-skills --example list_assets
+cargo run -p tinybrowser-skills --example print_skill
+```
+
 ## Requirements
 
 A Chrome or Chromium on the host, or a DevTools endpoint to attach to. The
@@ -128,6 +171,22 @@ without one would fail it for the wrong reason:
 TINYBROWSER_LIVE_TESTS=1 cargo test -p tinybrowser --test live_chrome
 ```
 
+Credentialed controller checks are separately opt-in. They read
+`OPENROUTER_API_KEY` from the environment and never print it:
+
+```sh
+TINYBROWSER_OPENROUTER_LIVE_TESTS=1 \
+  cargo test -p tinybrowser-control --test live_control \
+  live_openrouter_completes_a_multi_step_browser_task -- --nocapture
+
+TINYBROWSER_TRIP_LIVE_TESTS=1 \
+  cargo test -p tinybrowser-control --test live_trip_com -- --nocapture
+
+TINYBROWSER_DOWNLOAD_LIVE_TESTS=1 \
+TINYBROWSER_DOWNLOAD_DIR=/absolute/download/directory \
+  cargo test -p tinybrowser-control --test live_tinyhumans_download -- --nocapture
+```
+
 `AGENTS.md` is the full working agreement. `CLAUDE.md` is a symlink to it.
 
 ## Credit
@@ -136,7 +195,9 @@ The design owes a great deal to Vercel's
 [`agent-browser`](https://github.com/vercel-labs/agent-browser): the
 accessibility tree as the thing an agent reads, `@ref` addressing scoped to a
 snapshot, and hit-testing a click point before dispatching at it. See
-`THIRD-PARTY.md`.
+`THIRD-PARTY.md`. Its pinned source lives at `vendor/agent-browser` for feature
+comparison and compatibility work. The Jev transport is pinned separately at
+`vendor/tinyjevclient` and linked only by `tinybrowser-control`.
 
 ## License
 

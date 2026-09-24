@@ -41,6 +41,9 @@ use crate::error::{Error, Result};
 /// hold the reader task hostage.
 const EVENT_BUFFER: usize = 2_048;
 
+/// Download events need a loss-resistant path that page traffic cannot fill.
+const DOWNLOAD_EVENT_BUFFER: usize = 64;
+
 /// How often to ping the socket.
 ///
 /// A CDP socket carrying an idle page sends nothing for minutes at a time, and
@@ -75,6 +78,7 @@ pub(crate) struct CdpClient {
     next_id: AtomicU64,
     pending: Pending,
     events: broadcast::Sender<CdpEvent>,
+    download_events: broadcast::Sender<CdpEvent>,
     reader: tokio::task::JoinHandle<()>,
     /// Set once, immediately after construction.
     ///
@@ -151,9 +155,11 @@ impl CdpClient {
         let (sink, mut stream) = socket.split();
         let pending: Pending = Arc::new(Mutex::new(HashMap::new()));
         let (events, _) = broadcast::channel(EVENT_BUFFER);
+        let (download_events, _) = broadcast::channel(DOWNLOAD_EVENT_BUFFER);
 
         let reader_pending = Arc::clone(&pending);
         let reader_events = events.clone();
+        let reader_download_events = download_events.clone();
         let (closed_tx, mut closed_rx) = tokio::sync::watch::channel(false);
 
         let reader = tokio::spawn(async move {
@@ -183,14 +189,22 @@ impl CdpClient {
                         });
                     }
                 } else if let Some(method) = message.get("method").and_then(Value::as_str) {
-                    let _ = reader_events.send(CdpEvent {
+                    let event = CdpEvent {
                         method: method.to_string(),
                         params: message.get("params").cloned().unwrap_or(Value::Null),
                         session_id: message
                             .get("sessionId")
                             .and_then(Value::as_str)
                             .map(str::to_string),
-                    });
+                    };
+                    if matches!(
+                        method,
+                        "Browser.downloadWillBegin" | "Browser.downloadProgress"
+                    ) {
+                        let _ = reader_download_events.send(event);
+                    } else {
+                        let _ = reader_events.send(event);
+                    }
                 }
             }
 
@@ -207,6 +221,7 @@ impl CdpClient {
             next_id: AtomicU64::new(1),
             pending,
             events,
+            download_events,
             reader,
             keepalive: std::sync::OnceLock::new(),
         });
@@ -311,5 +326,10 @@ impl CdpClient {
     /// Subscribes to every event the browser emits from now on.
     pub(crate) fn events(&self) -> broadcast::Receiver<CdpEvent> {
         self.events.subscribe()
+    }
+
+    /// Subscribes to Chrome download events without competing with page traffic.
+    pub(crate) fn download_events(&self) -> broadcast::Receiver<CdpEvent> {
+        self.download_events.subscribe()
     }
 }

@@ -20,6 +20,7 @@
 //! - [`page`] — navigating, extracting a page as text, evaluating JavaScript.
 //! - [`snapshot`] — the accessibility tree, and the refs that address it.
 //! - [`action`] — every interaction, and the three ways to name an element.
+//! - [`download`] — browser download events retained as waitable handles.
 //! - [`output`] — screenshots, and the handle protocol that carries them.
 //! - [`errors`] — the failure names, and which of them an agent can act on.
 //! - [`version`] — [`CONTRACT_VERSION`] and the [`is_compatible`] bind rule.
@@ -106,6 +107,7 @@
 //! ```
 
 pub mod action;
+pub mod download;
 pub mod errors;
 pub mod names;
 pub mod output;
@@ -115,6 +117,7 @@ pub mod snapshot;
 pub mod version;
 
 pub use action::{Action, ActionOutcome, LocateBy, Locator, ScrollDirection, Target, WaitState};
+pub use download::{DownloadId, DownloadInfo, DownloadState, DownloadWaitRequest};
 pub use names::{INTERFACE, METHODS, OBJECT_PATH};
 pub use output::{ImageFormat, OutputChunk, OutputId, OutputRef, ScreenshotRequest};
 pub use page::{

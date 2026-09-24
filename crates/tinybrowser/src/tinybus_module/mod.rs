@@ -22,9 +22,9 @@
 use std::sync::{Arc, OnceLock};
 
 use tinybrowser_bus::{
-    Action, ActionOutcome, EvaluateRequest, NavigateRequest, OutputChunk, OutputId, OutputRef,
-    PageState, PageText, ReadRequest, ScreenshotRequest, SessionId, SessionInfo, SessionOptions,
-    Snapshot, SnapshotRequest, names,
+    Action, ActionOutcome, DownloadInfo, DownloadWaitRequest, EvaluateRequest, NavigateRequest,
+    OutputChunk, OutputId, OutputRef, PageState, PageText, ReadRequest, ScreenshotRequest,
+    SessionId, SessionInfo, SessionOptions, Snapshot, SnapshotRequest, names,
 };
 use tinybus::{Connection, Result as BusResult};
 
@@ -136,6 +136,26 @@ impl BrowserService {
             .map_err(|error| to_bus(&error))
     }
 
+    /// Lists retained downloads for one session.
+    async fn list_downloads(&self, id: SessionId) -> BusResult<Vec<DownloadInfo>> {
+        engine()
+            .list_downloads(&id)
+            .await
+            .map_err(|error| to_bus(&error))
+    }
+
+    /// Waits for the next terminal download not returned by an earlier wait.
+    async fn wait_download(
+        &self,
+        id: SessionId,
+        request: DownloadWaitRequest,
+    ) -> BusResult<DownloadInfo> {
+        engine()
+            .wait_download(&id, &request)
+            .await
+            .map_err(|error| to_bus(&error))
+    }
+
     /// Reports the contract version this module serves.
     ///
     /// A host calls this once, before its first real call, and compares it with
@@ -198,6 +218,8 @@ mod exports {
             "Screenshot",
             "ReadOutput",
             "ReleaseOutput",
+            "ListDownloads",
+            "WaitDownload",
             "ContractVersion",
         ],
         signals = [],

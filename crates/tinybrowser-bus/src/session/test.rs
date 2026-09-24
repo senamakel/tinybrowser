@@ -31,6 +31,7 @@ fn default_options_are_a_headless_desktop_browser() {
     assert_eq!(options.viewport, Viewport::desktop(1280, 800));
     assert_eq!(options.default_timeout_ms, 30_000);
     assert!(options.endpoint.is_none());
+    assert!(options.download_dir.is_none());
     assert!(options.allowed_origins.is_empty());
 }
 
@@ -60,6 +61,7 @@ fn options_serialize_with_the_documented_field_names() {
             "allowed_origins",
             "args",
             "default_timeout_ms",
+            "download_dir",
             "endpoint",
             "executable",
             "headless",

@@ -181,6 +181,30 @@ async fn reading_an_unknown_output_reports_it() -> tinybus::Result<()> {
     Ok(())
 }
 
+#[tokio::test]
+async fn download_members_report_an_unknown_session() -> tinybus::Result<()> {
+    let (proxy, _module) = connected().await?;
+    let id = SessionId::new("never-opened");
+    let listed = proxy
+        .call::<Vec<tinybrowser_bus::DownloadInfo>>(names::methods::LIST_DOWNLOADS, (id.clone(),))
+        .await;
+    assert!(listed.is_err());
+
+    let waited = proxy
+        .call::<tinybrowser_bus::DownloadInfo>(
+            names::methods::WAIT_DOWNLOAD,
+            (
+                id,
+                tinybrowser_bus::DownloadWaitRequest {
+                    timeout_ms: Some(1),
+                },
+            ),
+        )
+        .await;
+    assert!(waited.is_err());
+    Ok(())
+}
+
 /// Whether this run opted into driving a real browser.
 ///
 /// The same switch `tests/live_chrome.rs` reads, for the same reason: the
@@ -230,6 +254,64 @@ async fn serve(body: &'static str) -> String {
     format!("http://{address}/")
 }
 
+async fn serve_download() -> String {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("binds a loopback port");
+    let address = listener.local_addr().expect("has an address");
+    tokio::spawn(async move {
+        while let Ok((mut stream, _)) = listener.accept().await {
+            tokio::spawn(async move {
+                let mut request = [0_u8; 2_048];
+                let count = stream.read(&mut request).await.unwrap_or(0);
+                let request = String::from_utf8_lossy(&request[..count]);
+                let (extra, body): (&str, &[u8]) = if request.starts_with("GET /file ") {
+                    (
+                        "Content-Type: application/octet-stream\r\n\
+                         Content-Disposition: attachment; filename=\"bus.bin\"\r\n",
+                        b"bus-download",
+                    )
+                } else {
+                    (
+                        "Content-Type: text/html; charset=utf-8\r\n",
+                        b"<!doctype html><a href='/file' download>Download bus fixture</a>",
+                    )
+                };
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\n{extra}Content-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                let _ = stream.write_all(response.as_bytes()).await;
+                let _ = stream.write_all(body).await;
+            });
+        }
+    });
+    format!("http://{address}/")
+}
+
+async fn assert_download_members(
+    proxy: &tinybus::Proxy,
+    session: &SessionId,
+) -> tinybus::Result<()> {
+    let downloads: Vec<tinybrowser_bus::DownloadInfo> = proxy
+        .call(names::methods::LIST_DOWNLOADS, (session.clone(),))
+        .await?;
+    assert!(downloads.is_empty());
+    let waited = proxy
+        .call::<tinybrowser_bus::DownloadInfo>(
+            names::methods::WAIT_DOWNLOAD,
+            (
+                session.clone(),
+                tinybrowser_bus::DownloadWaitRequest {
+                    timeout_ms: Some(1),
+                },
+            ),
+        )
+        .await;
+    assert!(waited.is_err());
+    Ok(())
+}
+
 #[tokio::test]
 async fn live_every_member_answers_over_a_real_bus() -> tinybus::Result<()> {
     if !live() {
@@ -257,6 +339,7 @@ async fn live_every_member_answers_over_a_real_bus() -> tinybus::Result<()> {
         listed.iter().any(|info| info.id == session.id),
         "the session just opened is missing from {listed:?}"
     );
+    assert_download_members(&proxy, &session.id).await?;
 
     let page: tinybrowser_bus::PageState = proxy
         .call(
@@ -343,6 +426,76 @@ async fn live_every_member_answers_over_a_real_bus() -> tinybus::Result<()> {
         "the closed session is still listed in {after:?}"
     );
 
+    Ok(())
+}
+
+#[tokio::test]
+async fn live_download_handle_round_trips_over_the_bus() -> tinybus::Result<()> {
+    if !live() {
+        return Ok(());
+    }
+    let (proxy, _module) = connected().await?;
+    let directory = tempfile::tempdir().expect("download directory");
+    let mut session_options = options();
+    session_options.download_dir = Some(directory.path().to_string_lossy().into_owned());
+    let session: tinybrowser_bus::SessionInfo = proxy
+        .call(names::methods::OPEN_SESSION, (session_options,))
+        .await?;
+    let _: tinybrowser_bus::PageState = proxy
+        .call(
+            names::methods::NAVIGATE,
+            (
+                session.id.clone(),
+                tinybrowser_bus::NavigateRequest::new(serve_download().await),
+            ),
+        )
+        .await?;
+    let snapshot: tinybrowser_bus::Snapshot = proxy
+        .call(
+            names::methods::SNAPSHOT,
+            (
+                session.id.clone(),
+                tinybrowser_bus::SnapshotRequest::interactive(),
+            ),
+        )
+        .await?;
+    let link = snapshot
+        .refs
+        .iter()
+        .find(|element| element.name == "Download bus fixture")
+        .expect("download link");
+    let _: tinybrowser_bus::ActionOutcome = proxy
+        .call(
+            names::methods::PERFORM,
+            (
+                session.id.clone(),
+                tinybrowser_bus::Action::Click {
+                    target: tinybrowser_bus::Target::reference(&link.id),
+                    new_tab: false,
+                },
+            ),
+        )
+        .await?;
+    let download: tinybrowser_bus::DownloadInfo = proxy
+        .call(
+            names::methods::WAIT_DOWNLOAD,
+            (
+                session.id.clone(),
+                tinybrowser_bus::DownloadWaitRequest {
+                    timeout_ms: Some(10_000),
+                },
+            ),
+        )
+        .await?;
+    assert_eq!(download.state, tinybrowser_bus::DownloadState::Completed);
+    assert_eq!(download.suggested_filename, "bus.bin");
+    let listed: Vec<tinybrowser_bus::DownloadInfo> = proxy
+        .call(names::methods::LIST_DOWNLOADS, (session.id.clone(),))
+        .await?;
+    assert_eq!(listed, vec![download]);
+    proxy
+        .call::<()>(names::methods::CLOSE_SESSION, (session.id,))
+        .await?;
     Ok(())
 }
 

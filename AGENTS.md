@@ -29,9 +29,10 @@ crates/
 │       ├── page/       # navigation, extraction, evaluation
 │       ├── snapshot/   # the accessibility tree and its refs
 │       ├── action/     # every interaction, and how an element is named
+│       ├── download/   # retained Chrome download event handles
 │       ├── output/     # screenshots and the handle protocol that carries them
 │       └── errors/     # the wire error names, and which an agent can act on
-└── tinybrowser/        # the engine: behavior, adapter, and the cdylib
+├── tinybrowser/        # the engine: behavior, adapter, and the cdylib
     ├── src/
     │   ├── lib.rs          # crate docs + public surface, re-exporting the contract
     │   ├── error/          # crate-wide `Error` and `Result<T>`
@@ -45,7 +46,20 @@ crates/
     │   └── tinybus_module/ # TinyBus interface, ABI exports, integration tests
     ├── tests/          # integration tests against the public API only
     └── examples/       # runnable, compiled-in-CI usage examples
-vendor/tinybus/         # pinned TinyBus host types and module SDK
+├── tinybrowser-control/ # optional bounded Jev decision and execution loop
+    └── src/
+        ├── lib.rs      # `JevController`: decide once or run a whole task
+        ├── policy.rs   # pure question construction and answer decoding
+        ├── types.rs    # goals, limits, decisions, traces, and statuses
+        └── error.rs    # provider, policy, and browser failure boundary
+└── tinybrowser-skills/  # loadable agent skill, tool schemas, and examples
+    ├── skills/tinybrowser/SKILL.md
+    ├── schemas/
+    └── examples/
+vendor/
+├── tinybus/            # pinned TinyBus host types and module SDK
+├── tinyjevclient/      # typed System One transport used by browser control
+└── agent-browser/      # pinned compatibility and implementation reference
 docs/
 ├── specs/              # behavior and architecture specifications
 ├── plans/              # test-first implementation plans
@@ -68,6 +82,13 @@ types for hosts would mean a conversion at every call site that nothing checks.
 The rule for deciding where something goes: a payload type describes what a
 frame carries and belongs in the contract; anything that answers a frame, holds
 a connection, or touches a browser belongs in the module crate.
+
+`crates/tinybrowser-control` is deliberately outside that two-crate split. It
+is an optional host-side library that depends on the engine and pinned
+TinyJevClient. It turns goals into typed `Action`s, but no model, provider,
+prompt, task status, or policy type may move into `tinybrowser-bus` or the
+engine. `vendor/agent-browser` is source reference only because its Rust package
+is a binary, not a public library.
 
 ### Where the layers meet
 
@@ -211,6 +232,12 @@ Do not edit vendored code from the parent repository. Make TinyBus changes in
 its own repository, push them there, then update this repository's gitlink in a
 separate commit. Keep the exact path dependencies and minimal features unless a
 new module capability requires more.
+
+TinyJevClient and agent-browser are also pinned git submodules. The former is a
+path dependency of `tinybrowser-control`; the latter is a compatibility and
+implementation reference and is not part of the Cargo workspace. Never edit
+either from this parent repository. Make changes upstream, then update only the
+gitlink here. Their licences and roles are recorded in `THIRD-PARTY.md`.
 
 ## Testing
 
