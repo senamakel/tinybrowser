@@ -1,0 +1,34 @@
+[package]
+name = "tinybrowser-control"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Bounded Jev-driven agentic control for TinyBrowser."
+documentation = "https://docs.rs/tinybrowser-control"
+readme = "../../README.md"
+keywords = ["browser", "agents", "automation", "jev"]
+categories = ["web-programming", "development-tools"]
+publish = false
+
+[dependencies]
+# The controller composes the engine's typed snapshots and actions; it does not
+# restate either contract.
+tinybrowser = { workspace = true }
+# One System One request chooses an operation and speculative targets.
+tinyjevclient = { workspace = true }
+# Jev state and structured question instructions are JSON values.
+serde_json = { workspace = true }
+# The crate exposes one source-preserving error type.
+thiserror = { workspace = true }
+
+[dev-dependencies]
+# Async controller tests use the same runtime as the workspace.
+tokio = { workspace = true, features = ["fs", "io-util", "net", "sync"] }
+
+[features]
+default = []
+
+[lints]
+workspace = true

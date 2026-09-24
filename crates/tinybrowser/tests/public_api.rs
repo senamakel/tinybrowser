@@ -12,9 +12,9 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use tinybrowser::{
-    Action, Browser, Error, EvaluateRequest, LocateBy, Locator, NavigateRequest, OutputId,
-    ReadFormat, ReadRequest, ScreenshotRequest, SessionId, SessionOptions, SnapshotRequest, Target,
-    WaitUntil, errors, is_compatible, names,
+    Action, Browser, DownloadWaitRequest, Error, EvaluateRequest, LocateBy, Locator,
+    NavigateRequest, OutputId, ReadFormat, ReadRequest, ScreenshotRequest, SessionId,
+    SessionOptions, SnapshotRequest, Target, WaitUntil, errors, is_compatible, names,
 };
 
 #[test]
@@ -38,7 +38,7 @@ fn the_contract_is_re_exported_rather_than_restated() {
 fn the_bus_identity_is_available_to_consumers() {
     assert_eq!(names::INTERFACE, "ai.tinyhumans.tinybrowser.Browser");
     assert_eq!(names::OBJECT_PATH, "/ai/tinyhumans/tinybrowser/Browser");
-    assert_eq!(names::METHODS.len(), 12);
+    assert_eq!(names::METHODS.len(), 14);
     assert!(is_compatible(tinybrowser::CONTRACT_VERSION));
 }
 
@@ -50,6 +50,7 @@ fn every_payload_a_caller_needs_can_be_built_from_the_public_surface() {
     let _ = ReadRequest::default();
     let _ = EvaluateRequest::new("1 + 1");
     let _ = ScreenshotRequest::default();
+    let _ = DownloadWaitRequest::default();
     let _ = Action::Fill {
         target: Target::parse("#email"),
         value: "someone@example.com".to_string(),

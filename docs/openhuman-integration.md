@@ -161,6 +161,7 @@ to match:
 | `Find { by, value, action, fill_value }` | `Perform` with `Target::locator(..)` |
 | `Wait { selector, text, ms }` | `Perform` with `Action::WaitFor` |
 | `GetTitle`, `GetUrl` | any outcome's `page` field — no call needed |
+| download completion | `WaitDownload`, with `ListDownloads` for inspection |
 | `Close` | `CloseSession` |
 
 Two of those are worth noticing. `GetTitle` and `GetUrl` stop being calls at

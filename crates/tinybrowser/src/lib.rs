@@ -114,9 +114,10 @@ pub use error::{Error, Result};
 pub use tinybrowser_bus;
 
 pub use tinybrowser_bus::{
-    Action, ActionOutcome, CONTRACT_VERSION, ElementRef, EvaluateRequest, INTERFACE, ImageFormat,
-    LocateBy, Locator, METHODS, NavigateRequest, OBJECT_PATH, OutputChunk, OutputId, OutputRef,
-    PageState, PageText, ReadFormat, ReadRequest, ScreenshotRequest, ScrollDirection, SessionId,
-    SessionInfo, SessionOptions, Snapshot, SnapshotRequest, Target, Viewport, WaitState, WaitUntil,
-    errors, is_compatible, names,
+    Action, ActionOutcome, CONTRACT_VERSION, DownloadId, DownloadInfo, DownloadState,
+    DownloadWaitRequest, ElementRef, EvaluateRequest, INTERFACE, ImageFormat, LocateBy, Locator,
+    METHODS, NavigateRequest, OBJECT_PATH, OutputChunk, OutputId, OutputRef, PageState, PageText,
+    ReadFormat, ReadRequest, ScreenshotRequest, ScrollDirection, SessionId, SessionInfo,
+    SessionOptions, Snapshot, SnapshotRequest, Target, Viewport, WaitState, WaitUntil, errors,
+    is_compatible, names,
 };

@@ -6,9 +6,12 @@ Copyright Vercel, Inc. Licensed under the Apache License, Version 2.0.
 
 <https://github.com/vercel-labs/agent-browser>
 
-`crates/tinybrowser` is an independent implementation, but its design is taken
-from `agent-browser` and it would not look the way it does without it. The
-specific debts:
+The upstream source is pinned unchanged at `vendor/agent-browser` for feature
+comparison, compatibility testing, and implementation reference. Its current
+Rust package is a binary rather than a library, so no package in this workspace
+links it. `crates/tinybrowser` remains an independent implementation, but its
+design is taken from `agent-browser` and it would not look the way it does
+without it. The specific debts:
 
 - **The accessibility tree is what an agent reads.** Not the DOM, not a
   screenshot — the browser's own computed answer to "what is here and what does
@@ -28,11 +31,11 @@ specific debts:
   test id — follows theirs closely, deliberately, so that a host can move
   between the two without relearning what the verbs mean.
 
-No code was copied. The protocol conversation, the error taxonomy, the session
-and held-output model, the origin policy, and the whole `TinyBus` surface are
-this repository's own, and the licences differ — `agent-browser` is Apache-2.0
-and this project is GPL-3.0-only, a direction that is compatible one way and not
-the other.
+No code is compiled or copied into TinyBrowser. The protocol conversation, the
+error taxonomy, the session and held-output model, the origin policy, and the
+whole `TinyBus` surface are this repository's own, and the licences differ —
+`agent-browser` is Apache-2.0 and this project is GPL-3.0-only, a direction that
+is compatible one way and not the other.
 
 The Apache-2.0 licence requires that its notice travel with derivative work.
 This file is that notice, and it is here whether or not the requirement strictly
@@ -43,3 +46,11 @@ attaches, because the credit is owed either way.
 `vendor/tinybus` is a git submodule of <https://github.com/tinyhumansai/tinybus>
 and carries its own licence and copyright. It is pinned by gitlink and never
 modified from this repository.
+
+## TinyJevClient
+
+`vendor/tinyjevclient` is a git submodule of
+<https://github.com/tinyhumansai/tinyjevclient>, licensed GPL-3.0-only. It is
+pinned by gitlink and linked by `tinybrowser-control` as the typed System One
+transport. It remains provider transport only: task policy and browser effects
+are owned by this repository.

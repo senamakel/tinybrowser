@@ -12,9 +12,11 @@
 //!
 //! # Layout
 //!
+//! - [`downloads`] — retained browser download events and waiters.
 //! - [`policy`] — which destinations this session admits.
 //! - [`refs`] — the refs a snapshot minted, and when they go stale.
 
+pub(crate) mod downloads;
 pub(crate) mod policy;
 pub(crate) mod refs;
 
@@ -86,11 +88,14 @@ pub(crate) struct Session {
     /// The page target, kept so it can be closed without closing the browser a
     /// host lent us.
     target: String,
+    context: String,
     endpoint: String,
     /// The browser this module started, if it started one. A session that
     /// attached to somebody else's browser leaves it running.
     launched: Mutex<Option<LaunchedBrowser>>,
     refs: Mutex<RefMap>,
+    downloads: Arc<downloads::DownloadTracker>,
+    download_task: tokio::task::JoinHandle<()>,
 }
 
 impl Session {
@@ -122,10 +127,19 @@ impl Session {
         // means the session owns exactly one page and knows which it is —
         // adopting whatever tab happened to exist would make an attached
         // session start driving a page somebody else is using.
+        let context_result = client
+            .send(
+                "Target.createBrowserContext",
+                json!({}),
+                None,
+                COMMAND_TIMEOUT,
+            )
+            .await?;
+        let context = string_field(&context_result, "browserContextId")?;
         let created = client
             .send(
                 "Target.createTarget",
-                json!({ "url": "about:blank" }),
+                json!({ "url": "about:blank", "browserContextId": context }),
                 None,
                 COMMAND_TIMEOUT,
             )
@@ -142,15 +156,21 @@ impl Session {
             .await?;
         let page = string_field(&attached, "sessionId")?;
 
+        let downloads = downloads::DownloadTracker::new(options.download_dir.as_deref(), &target);
+        let download_task =
+            downloads::DownloadTracker::spawn(Arc::clone(&downloads), client.download_events());
         let session = Self {
             id,
             options,
             client,
             page,
             target,
+            context,
             endpoint,
             launched: Mutex::new(launched),
             refs: Mutex::new(RefMap::default()),
+            downloads,
+            download_task,
         };
 
         // A failure here has already cost a browser and a page target. Dropping
@@ -198,6 +218,26 @@ impl Session {
             .await?;
         }
 
+        let download_behavior = if let Some(directory) = &self.options.download_dir {
+            let path = std::path::Path::new(directory);
+            if !path.is_absolute() {
+                return Err(Error::invalid_input("download directory must be absolute"));
+            }
+            tokio::fs::create_dir_all(path).await.map_err(|error| {
+                Error::invalid_input(format!("download directory could not be created: {error}"))
+            })?;
+            json!({
+                "behavior": "allowAndName",
+                "downloadPath": directory,
+                "eventsEnabled": true,
+                "browserContextId": self.context,
+            })
+        } else {
+            return Ok(());
+        };
+        self.send_browser("Browser.setDownloadBehavior", download_behavior)
+            .await?;
+
         Ok(())
     }
 
@@ -219,6 +259,13 @@ impl Session {
     pub(crate) async fn send(&self, method: &str, params: Value) -> Result<Value> {
         self.client
             .send(method, params, Some(&self.page), COMMAND_TIMEOUT)
+            .await
+    }
+
+    /// Sends a command to the browser rather than the attached page.
+    pub(crate) async fn send_browser(&self, method: &str, params: Value) -> Result<Value> {
+        self.client
+            .send(method, params, None, COMMAND_TIMEOUT)
             .await
     }
 
@@ -247,6 +294,19 @@ impl Session {
     /// The refs the last snapshot minted.
     pub(crate) fn refs(&self) -> &Mutex<RefMap> {
         &self.refs
+    }
+
+    /// Every download event retained by this session.
+    pub(crate) async fn list_downloads(&self) -> Vec<tinybrowser_bus::DownloadInfo> {
+        self.downloads.list().await
+    }
+
+    /// Waits for the next terminal download not returned by an earlier wait.
+    pub(crate) async fn wait_download(
+        &self,
+        timeout_ms: Option<u64>,
+    ) -> Result<tinybrowser_bus::DownloadInfo> {
+        self.downloads.wait(self.deadline(timeout_ms)).await
     }
 
     /// Waits for a navigation that an input event started, if one started.
@@ -689,11 +749,22 @@ impl Session {
     /// Errors are swallowed: this is the teardown path, and a browser that has
     /// already gone is the outcome being asked for.
     pub(crate) async fn close(&self) {
+        self.downloads.close().await;
+        self.download_task.abort();
         let _ = self
             .client
             .send(
                 "Target.closeTarget",
                 json!({ "targetId": self.target }),
+                None,
+                COMMAND_TIMEOUT,
+            )
+            .await;
+        let _ = self
+            .client
+            .send(
+                "Target.disposeBrowserContext",
+                json!({ "browserContextId": self.context }),
                 None,
                 COMMAND_TIMEOUT,
             )
