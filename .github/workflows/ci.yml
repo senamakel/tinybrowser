@@ -26,8 +26,6 @@ jobs:
       # protocol conversation would be both unexercised and uncovered, which is
       # precisely the half that cannot be checked any other way.
       #
-      # GitHub's Ubuntu runners ship Google Chrome at a path the module already
-      # looks in, so there is nothing to install.
       TINYBROWSER_LIVE_TESTS: "1"
       # Runners restrict unprivileged user namespaces, so Chrome has no usable
       # sandbox here. Accepting that in a disposable CI VM is a different
@@ -52,30 +50,17 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      # Named explicitly rather than left to the module's own discovery order.
-      # The runner has several browsers on it, including a snap-packaged
-      # `/usr/bin/chromium` that starts, says nothing, and is timed out — and a
-      # build should not go red because the search order changed under it. This
-      # also prints which browser was chosen, so a future failure says so in the
-      # log instead of costing a round trip to find out.
-      - name: Select a browser for the live tests
+      - uses: browser-actions/setup-chrome@v2
+        id: chrome
+
+      - name: Select Chrome for the live tests
+        env:
+          CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
         run: |
           set -euo pipefail
-          for candidate in \
-            /usr/bin/google-chrome \
-            /usr/bin/google-chrome-stable \
-            /opt/google/chrome/chrome \
-            /usr/bin/chromium-browser \
-            /usr/bin/chromium
-          do
-            [ -x "$candidate" ] || continue
-            echo "selected $candidate"
-            "$candidate" --version || true
-            echo "TINYBROWSER_CHROME=$candidate" >> "$GITHUB_ENV"
-            exit 0
-          done
-          echo "no browser on this runner; the live tests cannot run" >&2
-          exit 1
+          test -x "$CHROME_PATH"
+          "$CHROME_PATH" --version
+          echo "TINYBROWSER_CHROME=$CHROME_PATH" >> "$GITHUB_ENV"
 
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -121,7 +106,10 @@ jobs:
             exit 1
           fi
 
-      - name: Require 90% line coverage in every source file
+      - name: Verify the coverage gate
+        run: .github/scripts/test-check-file-coverage.sh
+
+      - name: Require 90% line coverage in every production source file
         run: .github/scripts/check-file-coverage.sh 90 coverage.json
 
       - name: Upload coverage report
