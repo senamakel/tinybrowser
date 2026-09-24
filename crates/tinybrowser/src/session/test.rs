@@ -166,10 +166,16 @@ fn scheme_qualified_host_trees_accept_case_insensitive_scheme_but_no_ip_suffix()
         )
         .is_ok()
     );
-    for host in ["127.0.0.1", "8.8.8.8"] {
-        let allowed = vec![format!("https://.{host}")];
-        let url = normalize_url(&format!("https://{host}/")).unwrap();
-        assert!(check_allowed(&url, &allowed).is_err());
+    for (suffix, url) in [
+        ("127.0.0.1", "https://127.0.0.1/"),
+        ("127.0.0.1.", "https://127.0.0.1/"),
+        ("8.8.8.8..", "https://8.8.8.8/"),
+        ("[::1]", "https://[::1]/"),
+        ("::1", "https://[::1]/"),
+    ] {
+        let allowed = vec![format!("https://.{suffix}")];
+        let url = normalize_url(url).unwrap();
+        assert!(check_allowed(&url, &allowed).is_err(), "{suffix}");
     }
 }
 

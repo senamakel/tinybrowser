@@ -10,7 +10,8 @@
 //! Explicit requests are checked here. Sessions with an allowlist also enable
 //! [`super::navigation_guard`] so Chrome pauses document requests before network
 //! egress, including clicks and redirects. This is still a navigation policy,
-//! not a network sandbox: scripts and subresources can contact other hosts.
+//! not a network sandbox: scripts and subresources can contact other hosts,
+//! and a matching hostname can resolve or rebind to a private IP address.
 //! A host needing a whole-network boundary isolates the browser process.
 
 use url::Url;
@@ -94,12 +95,16 @@ pub(crate) fn check_allowed(url: &Url, allowed: &[String]) -> Result<()> {
     let permitted = allowed.iter().any(|entry| {
         let entry = entry.trim();
         if let Some((scheme, suffix)) = entry.split_once("://.") {
+            // Match and validate the same canonical suffix. Otherwise a final
+            // dot hides an IPv4 literal from the check below.
+            let suffix = suffix.trim_end_matches('.');
             return (scheme.eq_ignore_ascii_case("http") || scheme.eq_ignore_ascii_case("https"))
                 && url.scheme().eq_ignore_ascii_case(scheme)
                 && !suffix.is_empty()
                 && !suffix.contains('/')
+                // Colons reject ports and both bracketed and bare IPv6 suffixes.
                 && !suffix.contains(':')
-                && suffix.parse::<std::net::Ipv4Addr>().is_err()
+                && suffix.parse::<std::net::IpAddr>().is_err()
                 && host_matches_suffix(host, suffix);
         }
         if let Some(suffix) = entry.strip_prefix('.') {
