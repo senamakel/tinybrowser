@@ -127,6 +127,17 @@ trait DecisionSource {
     ) -> Result<Decision>;
 }
 
+fn completed_single_input_on_page(
+    task: &TaskRequest,
+    snapshot: &Snapshot,
+    observation: Option<&(String, String, String)>,
+) -> bool {
+    task.inputs.len() == 1
+        && observation.is_some_and(|(url, title, tree)| {
+            url == &snapshot.url && title == &snapshot.title && tree == &snapshot.tree
+        })
+}
+
 impl DecisionSource for JevController {
     async fn decide(
         &self,
@@ -223,13 +234,11 @@ impl JevController {
         let mut history = Vec::new();
         let mut unchanged = 0_usize;
         let mut done_unconfirmed = false;
-        let mut filled_observation: Option<(String, String)> = None;
+        let mut filled_observation: Option<(String, String, String)> = None;
 
         for step in 1..=self.limits.max_steps {
-            let fill_already_entered = task.inputs.len() == 1
-                && filled_observation
-                    .as_ref()
-                    .is_some_and(|(url, tree)| url == &snapshot.url && tree == &snapshot.tree);
+            let fill_already_entered =
+                completed_single_input_on_page(task, &snapshot, filled_observation.as_ref());
             let decision = decisions
                 .decide(
                     task,
@@ -284,7 +293,8 @@ impl JevController {
             let changed = policy::page_changed(&snapshot, &after);
             unchanged = policy::next_unchanged(unchanged, decision.operation, changed);
             if decision.operation == Operation::Fill && matches!(&outcome, StepOutcome::Acted) {
-                filled_observation = Some((after.url.clone(), after.tree.clone()));
+                filled_observation =
+                    Some((after.url.clone(), after.title.clone(), after.tree.clone()));
             } else if changed {
                 filled_observation = None;
             }

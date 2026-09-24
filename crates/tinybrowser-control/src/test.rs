@@ -394,9 +394,8 @@ async fn an_unconfirmed_done_reconsiders_the_visible_submit_button() {
         .tree
         .push_str("\ntextbox \"Query\" value=\"rust\" @e1");
     let mut submitted = filled.clone();
-    // A same-URL re-render after the click makes FILL available again.
-    submitted.url = filled.url.clone();
-    submitted.tree = "heading \"Results\" @e4".to_owned();
+    // A title-only change on the same URL makes FILL available again.
+    submitted.title = "Results".to_owned();
 
     let mut fill = decision(Operation::Fill, Some(element("e1", "textbox", "Query")));
     fill.input_name = Some("query".to_owned());
