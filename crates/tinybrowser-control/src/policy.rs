@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use serde_json::{Value, json};
-use tinybrowser::Snapshot;
+use tinybrowser_bus::Snapshot;
 use tinyjevclient::{
     Answer, Choice, ChoiceAnswer, EvaluationRequest, EvaluationResult, Noul, NoulCriteria, Question,
 };
@@ -291,7 +291,7 @@ fn selected_target(
     snapshot: &Snapshot,
     question: &str,
     accepts: impl Fn(&str) -> bool,
-) -> Result<(Option<tinybrowser::ElementRef>, Option<f64>)> {
+) -> Result<(Option<tinybrowser_bus::ElementRef>, Option<f64>)> {
     let candidates = snapshot
         .refs
         .iter()

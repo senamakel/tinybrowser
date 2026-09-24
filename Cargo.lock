@@ -1137,6 +1137,7 @@ dependencies = [
  "serde_json",
  "thiserror",
  "tinybrowser",
+ "tinybrowser-bus",
  "tinyjevclient",
  "tokio",
 ]

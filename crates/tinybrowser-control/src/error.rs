@@ -27,7 +27,7 @@ pub enum Error {
     Browser {
         /// The engine failure.
         #[source]
-        source: tinybrowser::Error,
+        source: BrowserControlError,
     },
 }
 
@@ -51,9 +51,37 @@ impl From<tinyjevclient::EvaluationFailure> for Error {
     }
 }
 
-impl From<tinybrowser::Error> for Error {
-    fn from(source: tinybrowser::Error) -> Self {
+impl From<BrowserControlError> for Error {
+    fn from(source: BrowserControlError) -> Self {
         Self::Browser { source }
+    }
+}
+
+/// A browser port failure with the stable wire name used for recovery policy.
+#[derive(Debug, thiserror::Error)]
+#[error("{name}: {message}")]
+pub struct BrowserControlError {
+    /// Stable `TinyBrowser` error name.
+    pub name: String,
+    /// Human-readable failure detail.
+    pub message: String,
+}
+
+impl BrowserControlError {
+    /// Return the stable error name.
+    #[must_use]
+    pub fn wire_name(&self) -> &str {
+        &self.name
+    }
+}
+
+#[cfg(feature = "engine")]
+impl From<tinybrowser::Error> for BrowserControlError {
+    fn from(source: tinybrowser::Error) -> Self {
+        Self {
+            name: source.wire_name().to_owned(),
+            message: source.to_string(),
+        }
     }
 }
 

@@ -5,7 +5,7 @@
 //! one typed System One request: Jev selects an operation and speculative
 //! targets, an independent Noul answer checks completion, and deterministic
 //! Rust code applies budgets and irreversible-action policy before calling
-//! [`tinybrowser::Browser`].
+//! [`tinybrowser::Browser`] or a host-owned [`BrowserControl`] port.
 //!
 //! The model never emits selectors, coordinates, JavaScript, or text to type.
 //! It selects only refs minted by the current accessibility snapshot and names
@@ -45,10 +45,12 @@ mod error;
 mod policy;
 mod types;
 
-use tinybrowser::{Action, ActionOutcome, Browser, SessionId, Snapshot, SnapshotRequest, errors};
+#[cfg(feature = "engine")]
+use tinybrowser::Browser;
+use tinybrowser_bus::{Action, ActionOutcome, SessionId, Snapshot, SnapshotRequest, errors};
 use tinyjevclient::Client;
 
-pub use error::{Error, Result};
+pub use error::{BrowserControlError, Error, Result};
 pub use types::{
     ControlLimits, Decision, Operation, StepOutcome, StepRecord, TaskRequest, TaskResult,
     TaskStatus,
@@ -61,35 +63,44 @@ pub struct JevController {
     limits: ControlLimits,
 }
 
-trait BrowserControl {
+/// Browser operations needed by the Jev loop. Hosts may implement this over `TinyBus`.
+#[allow(async_fn_in_trait)]
+pub trait BrowserControl {
+    /// Read the current accessibility snapshot for a session.
     async fn snapshot(
         &self,
         session: &SessionId,
         request: &SnapshotRequest,
-    ) -> tinybrowser::Result<Snapshot>;
+    ) -> std::result::Result<Snapshot, BrowserControlError>;
 
+    /// Perform one typed action in that session.
     async fn perform(
         &self,
         session: &SessionId,
         action: &Action,
-    ) -> tinybrowser::Result<ActionOutcome>;
+    ) -> std::result::Result<ActionOutcome, BrowserControlError>;
 }
 
+#[cfg(feature = "engine")]
 impl BrowserControl for Browser {
     async fn snapshot(
         &self,
         session: &SessionId,
         request: &SnapshotRequest,
-    ) -> tinybrowser::Result<Snapshot> {
-        Browser::snapshot(self, session, request).await
+    ) -> std::result::Result<Snapshot, BrowserControlError> {
+        Browser::snapshot(self, session, request)
+            .await
+            .map_err(Into::into)
     }
 
     async fn perform(
         &self,
         session: &SessionId,
         action: &Action,
-    ) -> tinybrowser::Result<ActionOutcome> {
-        Browser::perform(self, session, action).await
+    ) -> std::result::Result<ActionOutcome, BrowserControlError> {
+        Browser::perform(self, session, action)
+            .await
+            .map_err(Into::into)
     }
 }
 
@@ -141,7 +152,7 @@ impl JevController {
     pub async fn decide(
         &self,
         task: &TaskRequest,
-        snapshot: &tinybrowser::Snapshot,
+        snapshot: &Snapshot,
         history: &[StepRecord],
     ) -> Result<Decision> {
         let request = policy::build_request(task, snapshot, history)?;
@@ -163,7 +174,7 @@ impl JevController {
     /// non-recoverable browser failures.
     pub async fn run(
         &self,
-        browser: &Browser,
+        browser: &impl BrowserControl,
         session: &SessionId,
         task: &TaskRequest,
     ) -> Result<TaskResult> {

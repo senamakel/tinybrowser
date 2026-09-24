@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::time::Duration;
 
-use tinybrowser::{Action, ElementRef, ScrollDirection, Snapshot, Target, WaitState};
+use tinybrowser_bus::{Action, ElementRef, ScrollDirection, Snapshot, Target, WaitState};
 use tinyjevclient::Usage;
 
 use crate::{Error, Result};
