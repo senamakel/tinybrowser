@@ -180,6 +180,13 @@ fn scheme_qualified_host_trees_accept_case_insensitive_scheme_but_no_ip_suffix()
 }
 
 #[test]
+fn a_legacy_dotted_ipv6_suffix_does_not_match_a_bracketed_ipv6_host() {
+    let url = normalize_url("https://[::1]/").unwrap();
+    assert_eq!(url.host_str(), Some("[::1]"));
+    assert!(check_allowed(&url, &[".::1".to_owned()]).is_err());
+}
+
+#[test]
 fn a_bare_host_entry_is_read_as_that_host() {
     // An operator who wrote `example.com` meant the site. Refusing to interpret
     // it would block everything instead, which is a worse failure than being
