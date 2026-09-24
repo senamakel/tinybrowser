@@ -172,11 +172,17 @@ impl BrowserControl for FakeBrowser {
 }
 
 #[derive(Debug)]
-struct FakeDecisions(Mutex<VecDeque<Result<Decision>>>);
+struct FakeDecisions {
+    decisions: Mutex<VecDeque<Result<Decision>>>,
+    offered: Mutex<Vec<(bool, bool)>>,
+}
 
 impl FakeDecisions {
     fn new(decisions: impl IntoIterator<Item = Decision>) -> Self {
-        Self(Mutex::new(decisions.into_iter().map(Ok).collect()))
+        Self {
+            decisions: Mutex::new(decisions.into_iter().map(Ok).collect()),
+            offered: Mutex::new(Vec::new()),
+        }
     }
 }
 
@@ -186,10 +192,15 @@ impl DecisionSource for FakeDecisions {
         _task: &TaskRequest,
         _snapshot: &Snapshot,
         _history: &[StepRecord],
-        _done_unconfirmed: bool,
+        done_unconfirmed: bool,
+        fill_already_entered: bool,
     ) -> impl std::future::Future<Output = Result<Decision>> {
+        self.offered
+            .lock()
+            .expect("offered lock")
+            .push((done_unconfirmed, fill_already_entered));
         std::future::ready(
-            self.0
+            self.decisions
                 .lock()
                 .expect("decision lock")
                 .pop_front()
@@ -204,7 +215,8 @@ fn one_request_contains_operation_targets_inputs_and_completion() {
         ("query".to_owned(), "local-only-value".to_owned()),
         ("site".to_owned(), "example.com".to_owned()),
     ]));
-    let request = policy::build_request(&task, &snapshot(), &[], false).expect("valid request");
+    let request =
+        policy::build_request(&task, &snapshot(), &[], false, false).expect("valid request");
 
     assert_eq!(request.model, "jev-latest");
     request.validate().expect("meets the client contract");
@@ -241,8 +253,8 @@ fn single_targets_and_inputs_are_resolved_without_invalid_choice_questions() {
         "query".to_owned(),
         "local value".to_owned(),
     )]));
-    let request =
-        policy::build_request(&task, &single_target_snapshot(), &[], false).expect("valid request");
+    let request = policy::build_request(&task, &single_target_snapshot(), &[], false, false)
+        .expect("valid request");
 
     request.validate().expect("meets the client contract");
     assert!(!request.questions.contains_key("fill_target"));
@@ -251,8 +263,9 @@ fn single_targets_and_inputs_are_resolved_without_invalid_choice_questions() {
 
 #[test]
 fn fill_is_not_offered_without_a_caller_supplied_value() {
-    let request = policy::build_request(&TaskRequest::new("inspect"), &snapshot(), &[], false)
-        .expect("valid request");
+    let request =
+        policy::build_request(&TaskRequest::new("inspect"), &snapshot(), &[], false, false)
+            .expect("valid request");
     let Question::Choice(operation) = &request.questions["operation"] else {
         panic!("operation must be a choice");
     };
@@ -336,6 +349,7 @@ fn an_unconfirmed_done_retry_offers_actions_but_not_done() {
         &snapshot(),
         &[],
         true,
+        true,
     )
     .expect("valid retry request");
     let Question::Choice(operation) = &request.questions["operation"] else {
@@ -343,8 +357,33 @@ fn an_unconfirmed_done_retry_offers_actions_but_not_done() {
     };
     assert!(operation.criteria.contains_key("CLICK"));
     assert!(!operation.criteria.contains_key("DONE"));
+    assert!(!operation.criteria.contains_key("FILL"));
     assert_eq!(request.state["done_unconfirmed"], json!(true));
     request.validate().expect("retry request is valid");
+}
+
+#[test]
+fn a_completed_single_input_is_not_offered_for_another_fill() {
+    let task = TaskRequest::new("submit search")
+        .with_inputs(BTreeMap::from([("query".to_owned(), "rust".to_owned())]));
+    let request = policy::build_request(&task, &snapshot(), &[], false, true)
+        .expect("valid request after fill");
+    let Question::Choice(operation) = &request.questions["operation"] else {
+        panic!("operation must be a choice");
+    };
+    assert!(!operation.criteria.contains_key("FILL"));
+    assert!(operation.criteria.contains_key("CLICK"));
+    assert!(operation.criteria.contains_key("DONE"));
+    assert!(!request.questions.contains_key("fill_target"));
+    assert_eq!(request.state["fill_already_entered"], json!(true));
+    request.validate().expect("meets the client contract");
+
+    let next_page = policy::build_request(&task, &snapshot(), &[], false, false)
+        .expect("valid request on another page");
+    let Question::Choice(operation) = &next_page.questions["operation"] else {
+        panic!("operation must be a choice");
+    };
+    assert!(operation.criteria.contains_key("FILL"));
 }
 
 #[tokio::test]
@@ -369,13 +408,9 @@ async fn an_unconfirmed_done_reconsiders_the_visible_submit_button() {
     let task = TaskRequest::new("submit the search and reach results")
         .with_inputs(BTreeMap::from([("query".to_owned(), "rust".to_owned())]));
 
+    let decisions = FakeDecisions::new([fill, unconfirmed, click, confirmed]);
     let result = controller()
-        .run_with(
-            &browser,
-            &FakeDecisions::new([fill, unconfirmed, click, confirmed]),
-            &SessionId::new("session"),
-            &task,
-        )
+        .run_with(&browser, &decisions, &SessionId::new("session"), &task)
         .await
         .expect("task result");
 
@@ -384,6 +419,10 @@ async fn an_unconfirmed_done_reconsiders_the_visible_submit_button() {
     assert_eq!(result.steps[0].decision.operation, Operation::Fill);
     assert_eq!(result.steps[1].decision.operation, Operation::Click);
     assert_eq!(browser.actions.lock().expect("actions").len(), 2);
+    assert_eq!(
+        *decisions.offered.lock().expect("offered lock"),
+        [(false, false), (false, true), (true, true), (false, false)]
+    );
 }
 
 #[tokio::test]
@@ -439,7 +478,7 @@ async fn an_unconfirmed_form_goal_selects_the_current_submit_ref_and_preserves_a
     fill.input_name = Some("my-text".to_owned());
     let mut unconfirmed = decision(Operation::Done, None);
     unconfirmed.goal_done = 0.1;
-    let retry_request = policy::build_request(&task, &filled, &[], true)
+    let retry_request = policy::build_request(&task, &filled, &[], true, true)
         .expect("retry uses the current form snapshot");
     let Question::Choice(click_targets) = &retry_request.questions["click_target"] else {
         panic!("click targets must be a choice");
@@ -640,8 +679,14 @@ fn request_state_includes_bounded_recent_history() {
         outcome: StepOutcome::Acted,
     };
     let history = vec![record; 10];
-    let request = policy::build_request(&TaskRequest::new("search"), &snapshot(), &history, false)
-        .expect("valid request");
+    let request = policy::build_request(
+        &TaskRequest::new("search"),
+        &snapshot(),
+        &history,
+        false,
+        false,
+    )
+    .expect("valid request");
     assert_eq!(
         request.state["recent_actions"].as_array().map(Vec::len),
         Some(8)

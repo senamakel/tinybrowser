@@ -18,6 +18,7 @@ pub(crate) fn build_request(
     snapshot: &Snapshot,
     history: &[StepRecord],
     done_unconfirmed: bool,
+    fill_already_entered: bool,
 ) -> Result<EvaluationRequest> {
     if task.goal.trim().is_empty() {
         return Err(Error::invalid_task("goal must not be empty"));
@@ -29,7 +30,14 @@ pub(crate) fn build_request(
     let click = candidates(snapshot, is_clickable);
     let fill = candidates(snapshot, is_fillable);
     let check = candidates(snapshot, is_checkable);
-    let questions = build_questions(task, &click, &fill, &check, done_unconfirmed);
+    let questions = build_questions(
+        task,
+        &click,
+        &fill,
+        &check,
+        done_unconfirmed,
+        fill_already_entered,
+    );
     Ok(EvaluationRequest::jev(
         json!({
             "goal": task.goal,
@@ -41,6 +49,7 @@ pub(crate) fn build_request(
             },
             "recent_actions": recent_history(history),
             "done_unconfirmed": done_unconfirmed,
+            "fill_already_entered": fill_already_entered,
         }),
         questions,
     ))
@@ -52,8 +61,16 @@ fn build_questions(
     fill: &BTreeMap<String, Option<Value>>,
     check: &BTreeMap<String, Option<Value>>,
     done_unconfirmed: bool,
+    fill_already_entered: bool,
 ) -> BTreeMap<String, Question> {
-    let operations = operation_criteria(task, click, fill, check, done_unconfirmed);
+    let operations = operation_criteria(
+        task,
+        click,
+        fill,
+        check,
+        done_unconfirmed,
+        fill_already_entered,
+    );
     let instructions = |operation: &str| {
         json!({
             "goal": task.goal,
@@ -91,7 +108,9 @@ fn build_questions(
         click,
         &instructions,
     );
-    insert_target(&mut questions, "fill_target", "FILL", fill, &instructions);
+    if !fill_already_entered {
+        insert_target(&mut questions, "fill_target", "FILL", fill, &instructions);
+    }
     insert_target(
         &mut questions,
         "check_target",
@@ -99,7 +118,7 @@ fn build_questions(
         check,
         &instructions,
     );
-    if task.inputs.len() > 1 {
+    if task.inputs.len() > 1 && !fill_already_entered {
         questions.insert(
             "fill_input".to_owned(),
             Question::Choice(Choice {
@@ -131,6 +150,7 @@ fn operation_criteria(
     fill: &BTreeMap<String, Option<Value>>,
     check: &BTreeMap<String, Option<Value>>,
     done_unconfirmed: bool,
+    fill_already_entered: bool,
 ) -> BTreeMap<String, Option<Value>> {
     let mut operations = BTreeMap::new();
     if !click.is_empty() {
@@ -139,7 +159,7 @@ fn operation_criteria(
             Some(json!("Click a link, button, or control")),
         );
     }
-    if !fill.is_empty() && !task.inputs.is_empty() {
+    if !fill.is_empty() && !task.inputs.is_empty() && !fill_already_entered {
         operations.insert(
             "FILL".to_owned(),
             Some(json!("Replace the value of an editable field")),
