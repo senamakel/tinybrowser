@@ -337,6 +337,11 @@ pub(crate) fn is_irreversible(decision: &Decision) -> bool {
     let Some(target) = &decision.target else {
         return false;
     };
+    // An unnamed ref has no observable intent, including when its role is link:
+    // the snapshot does not carry an href or prove that clicking only navigates.
+    if target.name.trim().is_empty() {
+        return true;
+    }
     let normalized = target
         .name
         .to_lowercase()
@@ -353,22 +358,59 @@ pub(crate) fn is_irreversible(decision: &Decision) -> bool {
         " {} ",
         normalized.split_whitespace().collect::<Vec<_>>().join(" ")
     );
+    // A bare Submit is ambiguous. Otherwise, require evidence in the label of
+    // a consequential form; search and filter submissions stay available.
+    let consequential_submit = label.contains(" submit ")
+        && (label.trim() == "submit"
+            || [
+                " payment ",
+                " order ",
+                " transfer ",
+                " application ",
+                " booking ",
+                " reservation ",
+                " purchase ",
+                " checkout ",
+                " account ",
+                " request ",
+                " feedback ",
+                " message ",
+                " review ",
+                " report ",
+                " form ",
+                " transaction ",
+            ]
+            .iter()
+            .any(|context| label.contains(context)));
     [
         " buy ",
-        " buy now ",
         " purchase ",
         " pay ",
+        " checkout ",
         " place order ",
-        " confirm order ",
-        " confirm booking ",
+        " confirm ",
+        " book ",
+        " reserve ",
+        " transfer ",
+        " authorize ",
+        " approve ",
+        " accept ",
         " send ",
         " post ",
         " publish ",
+        " upload ",
+        " share ",
+        " invite ",
+        " sign ",
+        " subscribe ",
+        " unsubscribe ",
+        " save ",
         " delete ",
-        " remove account ",
+        " remove ",
     ]
     .iter()
     .any(|needle| label.contains(needle))
+        || consequential_submit
 }
 
 pub(crate) fn page_changed(before: &Snapshot, after: &Snapshot) -> bool {

@@ -69,7 +69,11 @@ one of these statuses is reached:
   threshold.
 - `Blocked`: Jev found no supported action that can make progress.
 - `NeedsConfirmation`: a likely irreversible click was selected and approval
-  was not present. The pending decision is returned and nothing is clicked.
+  was not present. This includes consequential labels (for example submit,
+  transfer, authorize, save, share, and delete) and all unnamed click targets.
+  Search and filter submissions are routine; a bare `Submit` or one naming a
+  consequential form still requires confirmation.
+  The pending decision is returned and nothing is clicked.
 - `Stuck`: the configured number of non-wait actions produced no visible
   snapshot change.
 - `Budget`: the step limit was exhausted.

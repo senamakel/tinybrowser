@@ -329,7 +329,7 @@ fn done_requires_the_independent_completion_threshold() {
 }
 
 #[test]
-fn irreversible_policy_is_narrow_and_click_only() {
+fn irreversible_policy_covers_consequential_clicks_and_unlabeled_controls() {
     assert!(policy::is_irreversible(&decision(
         Operation::Click,
         Some(element("e1", "button", "Place order"))
@@ -338,9 +338,55 @@ fn irreversible_policy_is_narrow_and_click_only() {
         Operation::Click,
         Some(element("e1", "button", "Place order:"))
     )));
+    for label in [
+        "Submit application",
+        "Submit payment",
+        "Submit order",
+        "Submit transfer",
+        "Transfer funds",
+        "Authorize payment",
+        "Approve access",
+        "Confirm transfer",
+        "Save changes",
+        "Share document",
+        "Invite member",
+    ] {
+        assert!(
+            policy::is_irreversible(&decision(
+                Operation::Click,
+                Some(element("e1", "button", label))
+            )),
+            "{label} must require confirmation"
+        );
+    }
+    assert!(policy::is_irreversible(&decision(
+        Operation::Click,
+        Some(element("e1", "button", "  "))
+    )));
+    assert!(policy::is_irreversible(&decision(
+        Operation::Click,
+        Some(element("e1", "menuitem", ""))
+    )));
     assert!(!policy::is_irreversible(&decision(
         Operation::Click,
         Some(element("e2", "link", "Order history"))
+    )));
+    assert!(!policy::is_irreversible(&decision(
+        Operation::Click,
+        Some(element("e2", "button", "Search"))
+    )));
+    for label in ["Submit search", "Submit query", "Submit filters"] {
+        assert!(
+            !policy::is_irreversible(&decision(
+                Operation::Click,
+                Some(element("e2", "button", label))
+            )),
+            "{label} should remain available"
+        );
+    }
+    assert!(policy::is_irreversible(&decision(
+        Operation::Click,
+        Some(element("e2", "link", ""))
     )));
     assert!(!policy::is_irreversible(&decision(
         Operation::Fill,
@@ -492,22 +538,59 @@ async fn the_runner_accepts_only_independently_confirmed_done() {
 
 #[tokio::test]
 async fn the_runner_stops_before_an_irreversible_click() {
-    let click = decision(
-        Operation::Click,
-        Some(element("e8", "button", "Delete account")),
-    );
+    for (role, label) in [
+        ("button", "Delete account"),
+        ("button", "Submit"),
+        ("button", "Transfer"),
+        ("button", "Authorize"),
+        ("button", ""),
+        ("link", ""),
+    ] {
+        let click = decision(Operation::Click, Some(element("e8", role, label)));
+        let browser = FakeBrowser::new([snapshot()]);
+        let result = controller()
+            .run_with(
+                &browser,
+                &FakeDecisions::new([click.clone()]),
+                &SessionId::new("session"),
+                &TaskRequest::new("complete the requested action"),
+            )
+            .await
+            .expect("task result");
+
+        assert_eq!(result.status, TaskStatus::NeedsConfirmation, "{label}");
+        assert_eq!(result.pending, Some(click), "{label}");
+        assert!(result.steps.is_empty(), "{label}");
+        assert!(
+            browser.actions.lock().expect("action lock").is_empty(),
+            "{label}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn the_runner_can_submit_a_search_without_confirmation() {
+    let browser = FakeBrowser::new([snapshot(), snapshot()]);
     let result = controller()
+        .with_limits(ControlLimits {
+            max_steps: 1,
+            ..ControlLimits::default()
+        })
         .run_with(
-            &FakeBrowser::new([snapshot()]),
-            &FakeDecisions::new([click]),
+            &browser,
+            &FakeDecisions::new([decision(
+                Operation::Click,
+                Some(element("e8", "button", "Submit search")),
+            )]),
             &SessionId::new("session"),
-            &TaskRequest::new("delete the account"),
+            &TaskRequest::new("search"),
         )
         .await
         .expect("task result");
 
-    assert_eq!(result.status, TaskStatus::NeedsConfirmation);
-    assert!(result.pending.is_some());
+    assert_eq!(result.status, TaskStatus::Budget);
+    assert_eq!(result.steps.len(), 1);
+    assert_eq!(browser.actions.lock().expect("action lock").len(), 1);
 }
 
 #[tokio::test]
