@@ -66,7 +66,10 @@ one of these statuses is reached:
 - `Done`: Jev chose `DONE` and the independent completion probability met the
   configured threshold.
 - `DoneUnconfirmed`: Jev chose `DONE`, but the completion check did not meet the
-  threshold.
+  threshold and the decision budget cannot support another choice, or a retry
+  still selected `DONE`. With budget remaining, the controller first asks Jev
+  to choose another operation from the current snapshot without offering
+  `DONE`.
 - `Blocked`: Jev found no supported action that can make progress.
 - `NeedsConfirmation`: a likely irreversible click was selected and approval
   was not present. This includes consequential labels (for example submit,
@@ -84,8 +87,11 @@ remain distinct and retain their sources.
 
 ## Invariants and constraints
 
-- One Jev request per browser step, excluding provider retries internal to
-  `tinyjevclient`.
+- One Jev request per decision, including an unconfirmed-completion retry and
+  excluding provider retries internal to `tinyjevclient`.
+- For a task with one caller-supplied input, a successful fill removes `FILL`
+  from the offered operations while the URL stays the same. A new URL permits
+  another fill with that input.
 - Only refs from the snapshot used for the decision may be acted on.
 - User-supplied input values are never used as Jev criterion identifiers. The
   model sees input names; the controller retains the values locally.
