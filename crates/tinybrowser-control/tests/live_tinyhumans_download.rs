@@ -1,5 +1,6 @@
 //! Opt-in live `OpenRouter` download task against tinyhumans.ai.
 
+#![cfg(feature = "engine")]
 #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 
 use std::path::PathBuf;

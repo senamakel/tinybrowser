@@ -20,6 +20,8 @@
 //! # Example
 //!
 //! ```no_run
+//! # #[cfg(feature = "engine")]
+//! # mod engine_example {
 //! use std::collections::BTreeMap;
 //! use tinybrowser::{Browser, NavigateRequest, SessionOptions};
 //! use tinybrowser_control::{JevController, TaskRequest};
@@ -38,6 +40,7 @@
 //! let result = controller.run(&browser, &session.id, &task).await?;
 //! println!("{:?}: {} actions", result.status, result.steps.len());
 //! # Ok(())
+//! # }
 //! # }
 //! ```
 
@@ -67,6 +70,11 @@ pub struct JevController {
 #[allow(async_fn_in_trait)]
 pub trait BrowserControl {
     /// Read the current accessibility snapshot for a session.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BrowserControlError`] when the session is unavailable or the
+    /// browser cannot capture its page.
     async fn snapshot(
         &self,
         session: &SessionId,
@@ -74,6 +82,11 @@ pub trait BrowserControl {
     ) -> std::result::Result<Snapshot, BrowserControlError>;
 
     /// Perform one typed action in that session.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BrowserControlError`] when the action is refused, its target
+    /// is stale, or the browser cannot complete it.
     async fn perform(
         &self,
         session: &SessionId,
@@ -292,5 +305,5 @@ impl JevController {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "engine"))]
 mod test;

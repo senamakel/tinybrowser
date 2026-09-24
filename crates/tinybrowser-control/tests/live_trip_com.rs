@@ -1,5 +1,6 @@
 //! Opt-in live `OpenRouter` task against Trip.com.
 
+#![cfg(feature = "engine")]
 #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 
 use tinybrowser::{Browser, NavigateRequest, SessionOptions};

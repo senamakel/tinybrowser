@@ -57,6 +57,15 @@ impl From<BrowserControlError> for Error {
     }
 }
 
+#[cfg(feature = "engine")]
+impl From<tinybrowser::Error> for Error {
+    fn from(source: tinybrowser::Error) -> Self {
+        Self::Browser {
+            source: source.into(),
+        }
+    }
+}
+
 /// A browser port failure with the stable wire name used for recovery policy.
 #[derive(Debug, thiserror::Error)]
 #[error("{name}: {message}")]

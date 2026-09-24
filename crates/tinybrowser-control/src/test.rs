@@ -8,6 +8,12 @@ use std::time::Duration;
 
 use serde_json::json;
 use tinybrowser::{Action, ActionOutcome, PageState, ScrollDirection, SessionId, Snapshot, Target};
+
+#[test]
+fn direct_engine_errors_still_convert_to_controller_errors() {
+    let error: Error = tinybrowser::Error::not_actionable("stale target").into();
+    assert!(matches!(error, Error::Browser { .. }));
+}
 use tinyjevclient::{
     Answer, ChoiceAnswer, EvaluationResponse, EvaluationResult, NoulAnswer, Question, Usage,
 };
