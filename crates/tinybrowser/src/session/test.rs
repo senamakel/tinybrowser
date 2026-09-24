@@ -127,7 +127,12 @@ fn a_dotted_entry_does_not_admit_a_lookalike_domain() {
 #[test]
 fn a_scheme_qualified_dotted_entry_allows_only_https_on_that_host_tree() {
     let allowed = vec!["https://.example.com".to_string()];
-    for url in ["https://example.com/", "https://docs.example.com/path"] {
+    for url in [
+        "https://example.com/",
+        "https://docs.example.com/path",
+        "https://example.com./",
+        "https://docs.example.com./path",
+    ] {
         assert!(
             check_allowed(&normalize_url(url).unwrap(), &allowed).is_ok(),
             "{url}"
@@ -146,9 +151,9 @@ fn a_scheme_qualified_dotted_entry_allows_only_https_on_that_host_tree() {
 }
 
 #[test]
-fn explicit_https_public_wildcard_blocks_http_and_private_literals() {
+fn explicit_https_wildcard_blocks_http_local_names_and_all_ip_literals() {
     let allowed = vec!["https://.*".to_owned()];
-    for url in ["https://example.com/", "https://8.8.8.8/"] {
+    for url in ["https://example.com/", "https://docs.example.com/"] {
         assert!(
             check_allowed(&normalize_url(url).unwrap(), &allowed).is_ok(),
             "{url}"
@@ -163,6 +168,8 @@ fn explicit_https_public_wildcard_blocks_http_and_private_literals() {
         "https://169.254.1.2/",
         "https://100.64.0.1/",
         "https://198.19.0.1/",
+        "https://192.0.0.1/",
+        "https://8.8.8.8/",
         "https://[::1]/",
         "https://[fc00::1]/",
         "https://[::ffff:127.0.0.1]/",
@@ -177,7 +184,7 @@ fn explicit_https_public_wildcard_blocks_http_and_private_literals() {
             &normalize_url("https://[2606:4700:4700::1111]/").unwrap(),
             &allowed
         )
-        .is_ok()
+        .is_err()
     );
 }
 

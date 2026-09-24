@@ -13,8 +13,6 @@
 //! not a network sandbox: scripts and subresources can contact other hosts.
 //! A host needing a whole-network boundary isolates the browser process.
 
-use std::net::Ipv4Addr;
-
 use url::{Host, Url};
 
 use crate::error::{Error, Result};
@@ -96,7 +94,7 @@ pub(crate) fn check_allowed(url: &Url, allowed: &[String]) -> Result<()> {
     let permitted = allowed.iter().any(|entry| {
         let entry = entry.trim();
         if entry == "https://.*" {
-            return url.scheme() == "https" && public_host_literal(url);
+            return url.scheme() == "https" && nonlocal_dns_host(url);
         }
         if let Some((scheme, suffix)) = entry.split_once("://.") {
             return matches!(scheme, "http" | "https")
@@ -146,16 +144,18 @@ pub(crate) fn check_allowed(url: &Url, allowed: &[String]) -> Result<()> {
 }
 
 fn host_matches_suffix(host: &str, suffix: &str) -> bool {
+    let host = host.trim_end_matches('.');
+    let suffix = suffix.trim_end_matches('.');
     host.eq_ignore_ascii_case(suffix)
         || host
             .to_ascii_lowercase()
             .ends_with(&format!(".{}", suffix.to_ascii_lowercase()))
 }
 
-/// Public HTTPS host floor for the explicit allow-all navigation pattern.
-/// DNS can still resolve a public name to a private address; hosts requiring
-/// connection-level isolation must enforce that outside this URL guard.
-fn public_host_literal(url: &Url) -> bool {
+/// The explicit allow-all pattern admits HTTPS DNS names, excluding obvious
+/// local suffixes and every IP literal. It does not classify DNS answers: a
+/// host needing a private-network boundary must enforce it at connection time.
+fn nonlocal_dns_host(url: &Url) -> bool {
     match url.host() {
         Some(Host::Domain(host)) => {
             let normalized = host.trim_end_matches('.').to_ascii_lowercase();
@@ -166,32 +166,6 @@ fn public_host_literal(url: &Url) -> bool {
                     .rsplit_once('.')
                     .is_some_and(|(_, tld)| tld == "local"))
         }
-        Some(Host::Ipv4(ip)) => public_ipv4(ip),
-        Some(Host::Ipv6(ip)) => {
-            if let Some(mapped) = ip.to_ipv4_mapped() {
-                return public_ipv4(mapped);
-            }
-            !(ip.is_loopback()
-                || ip.is_unspecified()
-                || ip.is_unique_local()
-                || ip.is_unicast_link_local()
-                || ip.is_multicast())
-        }
-        None => false,
+        Some(Host::Ipv4(_) | Host::Ipv6(_)) | None => false,
     }
-}
-
-fn public_ipv4(ip: Ipv4Addr) -> bool {
-    let octets = ip.octets();
-    !(ip.is_private()
-        || ip.is_loopback()
-        || ip.is_link_local()
-        || ip.is_multicast()
-        || ip.is_broadcast()
-        || ip.is_unspecified()
-        || ip.is_documentation()
-        || octets[0] == 0
-        || octets[0] >= 240
-        || (octets[0] == 100 && (64..=127).contains(&octets[1]))
-        || (octets[0] == 198 && (18..=19).contains(&octets[1])))
 }
