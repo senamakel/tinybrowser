@@ -1,0 +1,56 @@
+{
+  "name": "browser_task",
+  "description": "Complete a bounded browser task using fast typed decisions. Prefer outcome-oriented goals. Stops before consequential actions and returns evidence, usage, and a confirmation request when needed.",
+  "input_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["goal"],
+    "properties": {
+      "goal": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Observable final state to reach, including every user constraint. Describe outcomes, not a guessed click sequence."
+      },
+      "start_url": {
+        "type": "string",
+        "format": "uri",
+        "description": "Optional page to open before the task begins."
+      },
+      "inputs": {
+        "type": "object",
+        "default": {},
+        "additionalProperties": { "type": "string" },
+        "description": "Caller-supplied values keyed by semantic names such as search query or departure airport. The controller never invents missing personal data."
+      },
+      "allowed_origins": {
+        "type": "array",
+        "items": { "type": "string", "minLength": 1 },
+        "uniqueItems": true,
+        "description": "Origins the host permits this task to navigate to."
+      },
+      "max_steps": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100,
+        "default": 30
+      },
+      "max_seconds": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 900,
+        "default": 120
+      },
+      "max_cost_usd": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 10,
+        "default": 0.1
+      },
+      "headed": {
+        "type": "boolean",
+        "default": false,
+        "description": "Show Chrome. Useful for sites that block headless browsers or require user interaction."
+      }
+    }
+  }
+}

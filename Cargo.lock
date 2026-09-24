@@ -354,6 +354,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87"
 
 [[package]]
+name = "httpdate"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
+
+[[package]]
 name = "hybrid-array"
 version = "0.4.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1105,6 +1111,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "tempfile",
  "thiserror",
  "tinybrowser-bus",
  "tinybus",
@@ -1120,6 +1127,25 @@ name = "tinybrowser-bus"
 version = "0.2.1"
 dependencies = [
  "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "tinybrowser-control"
+version = "0.2.1"
+dependencies = [
+ "serde_json",
+ "thiserror",
+ "tinybrowser",
+ "tinybrowser-bus",
+ "tinyjevclient",
+ "tokio",
+]
+
+[[package]]
+name = "tinybrowser-skills"
+version = "0.2.1"
+dependencies = [
  "serde_json",
 ]
 
@@ -1161,6 +1187,18 @@ dependencies = [
  "tinybus",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "tinyjevclient"
+version = "0.2.1"
+dependencies = [
+ "httpdate",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
 ]
 
 [[package]]

@@ -1,0 +1,31 @@
+{
+  "name": "browser",
+  "description": "Low-level TinyBrowser escape hatch for navigation, snapshots, typed interactions, reading, screenshots, and session cleanup. Snapshot before acting and prefer current refs.",
+  "input_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["action"],
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": ["open", "navigate", "snapshot", "click", "fill", "type", "press", "check", "scroll", "wait", "read", "screenshot", "list_downloads", "wait_download", "close"]
+      },
+      "url": { "type": "string", "format": "uri" },
+      "target": {
+        "type": "string",
+        "description": "A current snapshot ref such as @e12, or a deliberate selector when no ref exists."
+      },
+      "value": { "type": "string" },
+      "text": { "type": "string" },
+      "key": { "type": "string" },
+      "checked": { "type": "boolean" },
+      "direction": { "type": "string", "enum": ["up", "down", "left", "right"] },
+      "pixels": { "type": "integer", "minimum": 1 },
+      "milliseconds": { "type": "integer", "minimum": 0 },
+      "interactive_only": { "type": "boolean", "default": false },
+      "compact": { "type": "boolean", "default": true },
+      "full_page": { "type": "boolean", "default": false },
+      "max_chars": { "type": "integer", "minimum": 1, "maximum": 200000 }
+    }
+  }
+}

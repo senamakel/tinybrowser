@@ -130,6 +130,12 @@ pub struct SessionOptions {
     /// directory that is removed when the session closes, so one session's
     /// cookies and logins never leak into the next.
     pub user_data_dir: Option<String>,
+    /// Absolute directory where Chrome may save downloads.
+    ///
+    /// The module creates it when absent and never removes it when the session
+    /// closes. Relative paths are refused because they would resolve inside an
+    /// unspecified module host working directory.
+    pub download_dir: Option<String>,
     /// Extra command-line arguments for a launched browser.
     pub args: Vec<String>,
     /// If non-empty, the only origins this session may navigate to.
@@ -153,6 +159,7 @@ impl Default for SessionOptions {
             viewport: Viewport::default(),
             user_agent: None,
             user_data_dir: None,
+            download_dir: None,
             args: Vec::new(),
             allowed_origins: Vec::new(),
             default_timeout_ms: 30_000,

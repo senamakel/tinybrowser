@@ -8,7 +8,7 @@ terms an agent can act on.
 
 ## What a host gets
 
-One interface, `ai.tinyhumans.tinybrowser.Browser`, with twelve members listed
+One interface, `ai.tinyhumans.tinybrowser.Browser`, with fourteen members listed
 in `tinybrowser_bus::names::METHODS`. The vocabulary is published as
 `tinybrowser-bus`, a two-dependency crate with no transport, so the cost to the
 host of linking it is a `serde` derive.
@@ -89,6 +89,20 @@ OpenSession -> Navigate -> Snapshot -> Perform -> Snapshot -> ... -> CloseSessio
 - At most sixteen outputs are held, each at most 64 MiB, expiring after five
   minutes. Eviction is oldest-first, because the newest is the one somebody is
   about to read.
+
+### Downloads
+
+- A session may configure one absolute download directory owned by the host.
+  TinyBrowser creates it when absent and never removes explicit downloads.
+- Chrome download events are retained as typed handles. `ListDownloads`
+  inspects them; `WaitDownload` returns each completed or cancelled handle once
+  even when the event arrived before the wait began.
+- A completed handle reports Chrome's byte counts and expected local path. The
+  host still verifies the file's checksum, signature, and type before opening
+  it.
+- A harness races external completion handles against a Jev loop. Page
+  snapshots cannot prove a background download completed, so continuing to ask
+  Jev after the event is waste rather than additional intelligence.
 
 ### Errors
 
