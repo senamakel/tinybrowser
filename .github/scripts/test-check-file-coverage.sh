@@ -99,11 +99,19 @@ print(json.dumps(report))
 PY
 (
   cd "$repo_root"
-  PATH="$scratch/fakebin:$PATH" COVERAGE_FIXTURE="$scratch/wrapper-good.json" \
+  TINYBROWSER_LIVE_TESTS=1 PATH="$scratch/fakebin:$PATH" \
+    COVERAGE_FIXTURE="$scratch/wrapper-good.json" \
     "$script_dir/check-file-coverage.sh" 90 "$scratch/wrapped.json" > "$scratch/wrapped.out"
   grep -q 'crates/example/src/ops.rs' "$scratch/wrapped.out"
+  if PATH="$scratch/fakebin:$PATH" COVERAGE_FIXTURE="$scratch/wrapper-good.json" \
+      "$script_dir/check-file-coverage.sh" 90 "$scratch/not-opted-in.json" > "$scratch/not-opted-in.out" 2>&1; then
+    echo "coverage gate accepted missing live-test opt-in" >&2
+    exit 1
+  fi
+  grep -q 'requires TINYBROWSER_LIVE_TESTS=1' "$scratch/not-opted-in.out"
   if TINYBROWSER_CHROME="$scratch/missing-chrome" \
-      PATH="$scratch/fakebin:$PATH" COVERAGE_FIXTURE="$scratch/wrapper-good.json" \
+      TINYBROWSER_LIVE_TESTS=1 PATH="$scratch/fakebin:$PATH" \
+      COVERAGE_FIXTURE="$scratch/wrapper-good.json" \
       "$script_dir/check-file-coverage.sh" 90 "$scratch/missing.json" > "$scratch/missing.out" 2>&1; then
     echo "missing configured Chrome passed" >&2
     exit 1
@@ -112,7 +120,8 @@ PY
 )
 if (
   cd "$scratch"
-  PATH="$scratch/fakebin:$PATH" COVERAGE_FIXTURE="$scratch/wrapper-good.json" \
+  TINYBROWSER_LIVE_TESTS=1 PATH="$scratch/fakebin:$PATH" \
+    COVERAGE_FIXTURE="$scratch/wrapper-good.json" \
     "$script_dir/check-file-coverage.sh" 90 "$scratch/wrong-directory.json" > "$scratch/wrong-directory.out" 2>&1
 ); then
   echo "coverage gate accepted a different working directory" >&2

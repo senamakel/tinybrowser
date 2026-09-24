@@ -23,7 +23,7 @@ The gate runs the loopback-only live Chrome tests and fails if Chrome is
 unavailable; install Chrome and `cargo-llvm-cov` before running it locally:
 
 ```sh
-.github/scripts/check-file-coverage.sh 90 target/coverage.json
+TINYBROWSER_LIVE_TESTS=1 .github/scripts/check-file-coverage.sh 90 target/coverage.json
 .github/scripts/test-check-file-coverage.sh
 ```
 

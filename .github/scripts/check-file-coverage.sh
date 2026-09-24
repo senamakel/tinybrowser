@@ -10,15 +10,19 @@ if [[ "$(pwd -P)" != "$workspace_root" ]]; then
   exit 1
 fi
 
+if [[ "${TINYBROWSER_LIVE_TESTS:-}" != 1 ]]; then
+  echo "coverage gate requires TINYBROWSER_LIVE_TESTS=1 and a usable Chrome" >&2
+  exit 1
+fi
 if [[ -n "${TINYBROWSER_CHROME:-}" && ! -x "$TINYBROWSER_CHROME" ]]; then
   echo "configured TINYBROWSER_CHROME is not executable" >&2
   exit 1
 fi
 
 # The Chrome suites serve their pages on loopback and fail if Chrome is absent.
-# Without this opt-in their tests silently skip, leaving browser paths out of
-# the coverage report even though they are exercised in the release product.
-TINYBROWSER_LIVE_TESTS=1 cargo llvm-cov \
+# Requiring explicit opt-in prevents an apparently green coverage run whose
+# browser tests silently skipped on a developer machine without Chrome.
+cargo llvm-cov \
   --locked \
   --workspace \
   --all-targets \

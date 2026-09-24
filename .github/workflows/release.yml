@@ -33,6 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # The release coverage gate opts into Chrome tests on a disposable runner.
+      TINYBROWSER_LIVE_TESTS: "1"
       TINYBROWSER_CHROME_ARGS: --no-sandbox
     outputs:
       crate_name: ${{ steps.version.outputs.crate_name }}
