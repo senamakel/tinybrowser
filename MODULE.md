@@ -38,8 +38,14 @@ after five minutes, and a host that reads one to completion should release it.
 The `allowed_origins` on a session refuses explicit navigations and intercepts
 document requests from clicks, redirects, and page scripts before Chrome sends
 them. It is a navigation boundary, not a whole-network sandbox: subresources
-and scripts can still contact other hosts. A host needing that stronger boundary
-isolates the browser process.
+and scripts can still contact other hosts. Matching uses the URL hostname, not
+DNS answers; a matching hostname can resolve or rebind to a private IP address.
+A host needing to restrict destination addresses isolates the browser process
+at the network layer.
+
+Use `https://.example.com` to admit one HTTPS host and its subdomains while
+refusing HTTP. A bare `.example.com` matches both schemes for hosts that need
+that behavior.
 
 ## Installing
 

@@ -10,7 +10,8 @@
 //! Explicit requests are checked here. Sessions with an allowlist also enable
 //! [`super::navigation_guard`] so Chrome pauses document requests before network
 //! egress, including clicks and redirects. This is still a navigation policy,
-//! not a network sandbox: scripts and subresources can contact other hosts.
+//! not a network sandbox: scripts and subresources can contact other hosts,
+//! and a matching hostname can resolve or rebind to a private IP address.
 //! A host needing a whole-network boundary isolates the browser process.
 
 use url::Url;
@@ -64,8 +65,9 @@ pub(crate) fn normalize_url(raw: &str) -> Result<Url> {
 ///
 /// An empty allowlist admits everything: a session that did not ask for a
 /// boundary does not get one imposed on it. An entry is either an origin
-/// (`https://example.com`, matched on scheme, host, and port) or a host with a
-/// leading dot (`.example.com`, matching that host and every subdomain).
+/// (`https://example.com`, matched on scheme, host, and port), a host with a
+/// leading dot (`.example.com`, matching that host and every subdomain), or a
+/// scheme-qualified host tree (`https://.example.com`, matching HTTPS only).
 ///
 /// # Errors
 ///
@@ -92,14 +94,24 @@ pub(crate) fn check_allowed(url: &Url, allowed: &[String]) -> Result<()> {
 
     let permitted = allowed.iter().any(|entry| {
         let entry = entry.trim();
+        if let Some((scheme, suffix)) = entry.split_once("://.") {
+            // Match and validate the same canonical suffix. Otherwise a final
+            // dot hides an IPv4 literal from the check below.
+            let suffix = suffix.trim_end_matches('.');
+            return (scheme.eq_ignore_ascii_case("http") || scheme.eq_ignore_ascii_case("https"))
+                && url.scheme().eq_ignore_ascii_case(scheme)
+                && !suffix.is_empty()
+                && !suffix.contains('/')
+                // Colons reject ports and both bracketed and bare IPv6 suffixes.
+                && !suffix.contains(':')
+                && suffix.parse::<std::net::IpAddr>().is_err()
+                && host_matches_suffix(host, suffix);
+        }
         if let Some(suffix) = entry.strip_prefix('.') {
             // A leading dot means "this host and anything under it". Comparing
             // with the dot kept — `.example.com` against `evil-example.com` —
             // is what stops a suffix match from admitting a lookalike domain.
-            return host.eq_ignore_ascii_case(suffix)
-                || host
-                    .to_ascii_lowercase()
-                    .ends_with(&format!(".{}", suffix.to_ascii_lowercase()));
+            return host_matches_suffix(host, suffix);
         }
 
         // An entry with a scheme is an origin, and matched as one.
@@ -132,4 +144,13 @@ pub(crate) fn check_allowed(url: &Url, allowed: &[String]) -> Result<()> {
             url: url.to_string(),
         })
     }
+}
+
+fn host_matches_suffix(host: &str, suffix: &str) -> bool {
+    let host = host.trim_end_matches('.');
+    let suffix = suffix.trim_end_matches('.');
+    host.eq_ignore_ascii_case(suffix)
+        || host
+            .to_ascii_lowercase()
+            .ends_with(&format!(".{}", suffix.to_ascii_lowercase()))
 }
