@@ -35,10 +35,11 @@ refuses the ninth rather than starting it; a host is expected to close what it
 opens. Screenshots are held for collection, capped at 16 outstanding and expired
 after five minutes, and a host that reads one to completion should release it.
 
-The `allowed_origins` on a session is a guard rail, not a sandbox: it refuses
-navigations the module is asked to make, and a page's own JavaScript can
-navigate around it. A host that needs a real boundary puts the browser in a
-network namespace that only reaches what it should.
+The `allowed_origins` on a session refuses explicit navigations and intercepts
+document requests from clicks, redirects, and page scripts before Chrome sends
+them. It is a navigation boundary, not a whole-network sandbox: subresources
+and scripts can still contact other hosts. A host needing that stronger boundary
+isolates the browser process.
 
 ## Installing
 
