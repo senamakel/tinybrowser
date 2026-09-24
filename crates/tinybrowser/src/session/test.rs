@@ -146,6 +146,42 @@ fn a_scheme_qualified_dotted_entry_allows_only_https_on_that_host_tree() {
 }
 
 #[test]
+fn explicit_https_public_wildcard_blocks_http_and_private_literals() {
+    let allowed = vec!["https://.*".to_owned()];
+    for url in ["https://example.com/", "https://8.8.8.8/"] {
+        assert!(
+            check_allowed(&normalize_url(url).unwrap(), &allowed).is_ok(),
+            "{url}"
+        );
+    }
+    for url in [
+        "http://example.com/",
+        "https://localhost/",
+        "https://test.local/",
+        "https://127.0.0.1/",
+        "https://10.0.0.1/",
+        "https://169.254.1.2/",
+        "https://100.64.0.1/",
+        "https://198.19.0.1/",
+        "https://[::1]/",
+        "https://[fc00::1]/",
+        "https://[::ffff:127.0.0.1]/",
+    ] {
+        assert!(
+            check_allowed(&normalize_url(url).unwrap(), &allowed).is_err(),
+            "{url}"
+        );
+    }
+    assert!(
+        check_allowed(
+            &normalize_url("https://[2606:4700:4700::1111]/").unwrap(),
+            &allowed
+        )
+        .is_ok()
+    );
+}
+
+#[test]
 fn a_bare_host_entry_is_read_as_that_host() {
     // An operator who wrote `example.com` meant the site. Refusing to interpret
     // it would block everything instead, which is a worse failure than being
