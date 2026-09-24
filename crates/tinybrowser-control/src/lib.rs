@@ -122,6 +122,7 @@ trait DecisionSource {
         task: &TaskRequest,
         snapshot: &Snapshot,
         history: &[StepRecord],
+        done_unconfirmed: bool,
     ) -> Result<Decision>;
 }
 
@@ -131,8 +132,11 @@ impl DecisionSource for JevController {
         task: &TaskRequest,
         snapshot: &Snapshot,
         history: &[StepRecord],
+        done_unconfirmed: bool,
     ) -> Result<Decision> {
-        JevController::decide(self, task, snapshot, history).await
+        let request = policy::build_request(task, snapshot, history, done_unconfirmed)?;
+        let result = self.client.evaluate(&request).await?;
+        policy::decode(&result, snapshot, task)
     }
 }
 
@@ -167,9 +171,7 @@ impl JevController {
         snapshot: &Snapshot,
         history: &[StepRecord],
     ) -> Result<Decision> {
-        let request = policy::build_request(task, snapshot, history)?;
-        let result = self.client.evaluate(&request).await?;
-        policy::decode(&result, snapshot, task)
+        DecisionSource::decide(self, task, snapshot, history, false).await
     }
 
     /// Run a bounded task against one existing `TinyBrowser` session.
@@ -212,12 +214,21 @@ impl JevController {
         let mut snapshot = browser.snapshot(session, &snapshot_request).await?;
         let mut history = Vec::new();
         let mut unchanged = 0_usize;
+        let mut done_unconfirmed = false;
 
         for step in 1..=self.limits.max_steps {
-            let decision = decisions.decide(task, &snapshot, &history).await?;
-            if let Some(status) =
-                policy::terminal_status(&decision, self.limits.completion_threshold)
+            let decision = decisions
+                .decide(task, &snapshot, &history, done_unconfirmed)
+                .await?;
+            let terminal = policy::terminal_status(&decision, self.limits.completion_threshold);
+            if terminal == Some(TaskStatus::DoneUnconfirmed)
+                && !done_unconfirmed
+                && step < self.limits.max_steps
             {
+                done_unconfirmed = true;
+                continue;
+            }
+            if let Some(status) = terminal {
                 return Ok(TaskResult {
                     status,
                     steps: history,
@@ -260,6 +271,7 @@ impl JevController {
                 outcome,
             });
             snapshot = after;
+            done_unconfirmed = false;
             if unchanged >= self.limits.max_unchanged_steps {
                 return Ok(TaskResult {
                     status: TaskStatus::Stuck,

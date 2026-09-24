@@ -186,6 +186,7 @@ impl DecisionSource for FakeDecisions {
         _task: &TaskRequest,
         _snapshot: &Snapshot,
         _history: &[StepRecord],
+        _done_unconfirmed: bool,
     ) -> impl std::future::Future<Output = Result<Decision>> {
         std::future::ready(
             self.0
@@ -203,7 +204,7 @@ fn one_request_contains_operation_targets_inputs_and_completion() {
         ("query".to_owned(), "local-only-value".to_owned()),
         ("site".to_owned(), "example.com".to_owned()),
     ]));
-    let request = policy::build_request(&task, &snapshot(), &[]).expect("valid request");
+    let request = policy::build_request(&task, &snapshot(), &[], false).expect("valid request");
 
     assert_eq!(request.model, "jev-latest");
     request.validate().expect("meets the client contract");
@@ -241,7 +242,7 @@ fn single_targets_and_inputs_are_resolved_without_invalid_choice_questions() {
         "local value".to_owned(),
     )]));
     let request =
-        policy::build_request(&task, &single_target_snapshot(), &[]).expect("valid request");
+        policy::build_request(&task, &single_target_snapshot(), &[], false).expect("valid request");
 
     request.validate().expect("meets the client contract");
     assert!(!request.questions.contains_key("fill_target"));
@@ -250,7 +251,7 @@ fn single_targets_and_inputs_are_resolved_without_invalid_choice_questions() {
 
 #[test]
 fn fill_is_not_offered_without_a_caller_supplied_value() {
-    let request = policy::build_request(&TaskRequest::new("inspect"), &snapshot(), &[])
+    let request = policy::build_request(&TaskRequest::new("inspect"), &snapshot(), &[], false)
         .expect("valid request");
     let Question::Choice(operation) = &request.questions["operation"] else {
         panic!("operation must be a choice");
@@ -326,6 +327,193 @@ fn done_requires_the_independent_completion_threshold() {
         policy::terminal_status(&selected, 0.5),
         Some(TaskStatus::Done)
     );
+}
+
+#[test]
+fn an_unconfirmed_done_retry_offers_actions_but_not_done() {
+    let request = policy::build_request(
+        &TaskRequest::new("submit the search"),
+        &snapshot(),
+        &[],
+        true,
+    )
+    .expect("valid retry request");
+    let Question::Choice(operation) = &request.questions["operation"] else {
+        panic!("operation must be a choice");
+    };
+    assert!(operation.criteria.contains_key("CLICK"));
+    assert!(!operation.criteria.contains_key("DONE"));
+    assert_eq!(request.state["done_unconfirmed"], json!(true));
+    request.validate().expect("retry request is valid");
+}
+
+#[tokio::test]
+async fn an_unconfirmed_done_reconsiders_the_visible_submit_button() {
+    let before = snapshot();
+    let mut filled = before.clone();
+    filled
+        .tree
+        .push_str("\ntextbox \"Query\" value=\"rust\" @e1");
+    let mut submitted = filled.clone();
+    submitted.url = "https://example.com/results".to_owned();
+    submitted.tree = "heading \"Results\" @e4".to_owned();
+
+    let mut fill = decision(Operation::Fill, Some(element("e1", "textbox", "Query")));
+    fill.input_name = Some("query".to_owned());
+    let mut unconfirmed = decision(Operation::Done, None);
+    unconfirmed.goal_done = 0.1;
+    let click = decision(Operation::Click, Some(element("e2", "button", "Search")));
+    let mut confirmed = decision(Operation::Done, None);
+    confirmed.goal_done = 0.9;
+    let browser = FakeBrowser::new([before, filled, submitted]);
+    let task = TaskRequest::new("submit the search and reach results")
+        .with_inputs(BTreeMap::from([("query".to_owned(), "rust".to_owned())]));
+
+    let result = controller()
+        .run_with(
+            &browser,
+            &FakeDecisions::new([fill, unconfirmed, click, confirmed]),
+            &SessionId::new("session"),
+            &task,
+        )
+        .await
+        .expect("task result");
+
+    assert_eq!(result.status, TaskStatus::Done);
+    assert_eq!(result.steps.len(), 2);
+    assert_eq!(result.steps[0].decision.operation, Operation::Fill);
+    assert_eq!(result.steps[1].decision.operation, Operation::Click);
+    assert_eq!(browser.actions.lock().expect("actions").len(), 2);
+}
+
+#[tokio::test]
+async fn repeated_unconfirmed_done_stops_within_the_decision_budget() {
+    let mut unconfirmed = decision(Operation::Done, None);
+    unconfirmed.goal_done = 0.1;
+    let browser = FakeBrowser::new([snapshot()]);
+    let result = controller()
+        .with_limits(ControlLimits {
+            max_steps: 2,
+            ..ControlLimits::default()
+        })
+        .run_with(
+            &browser,
+            &FakeDecisions::new([unconfirmed.clone(), unconfirmed]),
+            &SessionId::new("session"),
+            &TaskRequest::new("reach results"),
+        )
+        .await
+        .expect("task result");
+
+    assert_eq!(result.status, TaskStatus::DoneUnconfirmed);
+    assert!(result.steps.is_empty());
+    assert!(browser.actions.lock().expect("actions").is_empty());
+}
+
+#[tokio::test]
+async fn an_unconfirmed_form_goal_selects_the_current_submit_ref_and_preserves_approval() {
+    let before = Snapshot {
+        url: "https://www.selenium.dev/selenium/web/web-form.html".to_owned(),
+        title: "Web form".to_owned(),
+        sequence: 1,
+        tree: "textbox \"Text input\" @e4\nbutton \"Reset\" @e22\nbutton \"Submit\" @e33"
+            .to_owned(),
+        refs: vec![
+            element("e4", "textbox", "Text input"),
+            element("e22", "button", "Reset"),
+            element("e33", "button", "Submit"),
+        ],
+        truncated: false,
+    };
+    let mut filled = before.clone();
+    filled.sequence = 2;
+    filled.tree = "textbox \"Text input\" value=\"OpenHuman browser smoke\" @e4\nbutton \"Reset\" @e22\nbutton \"Submit\" @e33".to_owned();
+    let task = TaskRequest::new("Reach the submitted result after entering text").with_inputs(
+        BTreeMap::from([("my-text".to_owned(), "OpenHuman browser smoke".to_owned())]),
+    );
+
+    let mut fill = decision(
+        Operation::Fill,
+        Some(element("e4", "textbox", "Text input")),
+    );
+    fill.input_name = Some("my-text".to_owned());
+    let mut unconfirmed = decision(Operation::Done, None);
+    unconfirmed.goal_done = 0.1;
+    let retry_request = policy::build_request(&task, &filled, &[], true)
+        .expect("retry uses the current form snapshot");
+    let Question::Choice(click_targets) = &retry_request.questions["click_target"] else {
+        panic!("click targets must be a choice");
+    };
+    assert!(click_targets.criteria.contains_key("e33"));
+    let submit = policy::decode(
+        &result(BTreeMap::from([
+            ("operation".to_owned(), choice("CLICK", &["CLICK", "DONE"])),
+            ("click_target".to_owned(), choice("e33", &["e22", "e33"])),
+            (
+                "goal_done".to_owned(),
+                Answer::Noul(NoulAnswer { noul: 0.1 }),
+            ),
+        ])),
+        &filled,
+        &task,
+    )
+    .expect("submit ref from current snapshot");
+    assert_eq!(
+        submit.target.as_ref().map(|target| target.id.as_str()),
+        Some("e33")
+    );
+
+    let browser = FakeBrowser::new([before.clone(), filled.clone()]);
+    let result = controller()
+        .run_with(
+            &browser,
+            &FakeDecisions::new([fill.clone(), unconfirmed.clone(), submit.clone()]),
+            &SessionId::new("session"),
+            &task,
+        )
+        .await
+        .expect("task result");
+
+    assert_eq!(result.status, TaskStatus::NeedsConfirmation);
+    assert_eq!(result.steps.len(), 1);
+    assert_eq!(result.steps[0].decision.operation, Operation::Fill);
+    assert_eq!(
+        result
+            .pending
+            .as_ref()
+            .and_then(|decision| decision.target.as_ref())
+            .map(|target| target.id.as_str()),
+        Some("e33")
+    );
+    assert_eq!(browser.actions.lock().expect("actions").len(), 1);
+
+    let mut submitted = filled.clone();
+    submitted.url = "https://www.selenium.dev/selenium/web/submitted-form.html".to_owned();
+    submitted.tree = "heading \"Form submitted\"\ntext \"Received!\"".to_owned();
+    let mut confirmed = decision(Operation::Done, None);
+    confirmed.goal_done = 0.9;
+    let authorized_browser = FakeBrowser::new([before, filled, submitted]);
+    let authorized = controller()
+        .run_with(
+            &authorized_browser,
+            &FakeDecisions::new([fill, unconfirmed, submit, confirmed]),
+            &SessionId::new("session"),
+            &task.allowing_irreversible(),
+        )
+        .await
+        .expect("authorized task result");
+    assert_eq!(authorized.status, TaskStatus::Done);
+    assert_eq!(authorized.steps.len(), 2);
+    assert_eq!(
+        authorized.steps[1]
+            .decision
+            .target
+            .as_ref()
+            .map(|target| target.id.as_str()),
+        Some("e33")
+    );
+    assert!(authorized.final_snapshot.tree.contains("Received!"));
+    assert_eq!(authorized_browser.actions.lock().expect("actions").len(), 2);
 }
 
 #[test]
@@ -452,7 +640,7 @@ fn request_state_includes_bounded_recent_history() {
         outcome: StepOutcome::Acted,
     };
     let history = vec![record; 10];
-    let request = policy::build_request(&TaskRequest::new("search"), &snapshot(), &history)
+    let request = policy::build_request(&TaskRequest::new("search"), &snapshot(), &history, false)
         .expect("valid request");
     assert_eq!(
         request.state["recent_actions"].as_array().map(Vec::len),

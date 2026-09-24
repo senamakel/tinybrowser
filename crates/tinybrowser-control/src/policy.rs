@@ -17,6 +17,7 @@ pub(crate) fn build_request(
     task: &TaskRequest,
     snapshot: &Snapshot,
     history: &[StepRecord],
+    done_unconfirmed: bool,
 ) -> Result<EvaluationRequest> {
     if task.goal.trim().is_empty() {
         return Err(Error::invalid_task("goal must not be empty"));
@@ -28,7 +29,7 @@ pub(crate) fn build_request(
     let click = candidates(snapshot, is_clickable);
     let fill = candidates(snapshot, is_fillable);
     let check = candidates(snapshot, is_checkable);
-    let questions = build_questions(task, &click, &fill, &check);
+    let questions = build_questions(task, &click, &fill, &check, done_unconfirmed);
     Ok(EvaluationRequest::jev(
         json!({
             "goal": task.goal,
@@ -39,6 +40,7 @@ pub(crate) fn build_request(
                 "truncated": snapshot.truncated,
             },
             "recent_actions": recent_history(history),
+            "done_unconfirmed": done_unconfirmed,
         }),
         questions,
     ))
@@ -49,8 +51,9 @@ fn build_questions(
     click: &BTreeMap<String, Option<Value>>,
     fill: &BTreeMap<String, Option<Value>>,
     check: &BTreeMap<String, Option<Value>>,
+    done_unconfirmed: bool,
 ) -> BTreeMap<String, Question> {
-    let operations = operation_criteria(task, click, fill, check);
+    let operations = operation_criteria(task, click, fill, check, done_unconfirmed);
     let instructions = |operation: &str| {
         json!({
             "goal": task.goal,
@@ -127,6 +130,7 @@ fn operation_criteria(
     click: &BTreeMap<String, Option<Value>>,
     fill: &BTreeMap<String, Option<Value>>,
     check: &BTreeMap<String, Option<Value>>,
+    done_unconfirmed: bool,
 ) -> BTreeMap<String, Option<Value>> {
     let mut operations = BTreeMap::new();
     if !click.is_empty() {
@@ -152,10 +156,15 @@ fn operation_criteria(
         ("SCROLL_UP", "Reveal content above the viewport"),
         ("BACK", "Return to the previous page"),
         ("WAIT", "Wait briefly for an update already in progress"),
-        ("DONE", "Every requirement is visibly satisfied"),
         ("BLOCKED", "No supported operation can make progress"),
     ] {
         operations.insert(key.to_owned(), Some(json!(description)));
+    }
+    if !done_unconfirmed {
+        operations.insert(
+            "DONE".to_owned(),
+            Some(json!("Every requirement is visibly satisfied")),
+        );
     }
 
     operations

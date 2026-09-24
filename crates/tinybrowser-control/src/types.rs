@@ -259,7 +259,8 @@ pub struct StepRecord {
 pub enum TaskStatus {
     /// `DONE` passed the independent completion threshold.
     Done,
-    /// `DONE` did not pass the independent completion threshold.
+    /// `DONE` did not pass the independent completion threshold and no retry
+    /// decision could continue the task.
     DoneUnconfirmed,
     /// Jev selected `BLOCKED`.
     Blocked,
