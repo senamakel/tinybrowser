@@ -8,6 +8,12 @@ use std::time::Duration;
 
 use serde_json::json;
 use tinybrowser::{Action, ActionOutcome, PageState, ScrollDirection, SessionId, Snapshot, Target};
+
+#[test]
+fn direct_engine_errors_still_convert_to_controller_errors() {
+    let error: Error = tinybrowser::Error::not_actionable("stale target").into();
+    assert!(matches!(error, Error::Browser { .. }));
+}
 use tinyjevclient::{
     Answer, ChoiceAnswer, EvaluationResponse, EvaluationResult, NoulAnswer, Question, Usage,
 };
@@ -131,7 +137,7 @@ impl BrowserControl for FakeBrowser {
         &self,
         _session: &SessionId,
         _request: &tinybrowser::SnapshotRequest,
-    ) -> impl std::future::Future<Output = tinybrowser::Result<Snapshot>> {
+    ) -> impl std::future::Future<Output = std::result::Result<Snapshot, BrowserControlError>> {
         std::future::ready(Ok(self
             .snapshots
             .lock()
@@ -144,7 +150,8 @@ impl BrowserControl for FakeBrowser {
         &self,
         _session: &SessionId,
         action: &Action,
-    ) -> impl std::future::Future<Output = tinybrowser::Result<ActionOutcome>> {
+    ) -> impl std::future::Future<Output = std::result::Result<ActionOutcome, BrowserControlError>>
+    {
         self.actions
             .lock()
             .expect("action lock")
@@ -158,7 +165,8 @@ impl BrowserControl for FakeBrowser {
                     Ok(ActionOutcome::acted(PageState::new(
                         "https://example.com/search",
                     )))
-                }),
+                })
+                .map_err(Into::into),
         )
     }
 }

@@ -5,7 +5,7 @@
 //! one typed System One request: Jev selects an operation and speculative
 //! targets, an independent Noul answer checks completion, and deterministic
 //! Rust code applies budgets and irreversible-action policy before calling
-//! [`tinybrowser::Browser`].
+//! [`tinybrowser::Browser`] or a host-owned [`BrowserControl`] port.
 //!
 //! The model never emits selectors, coordinates, JavaScript, or text to type.
 //! It selects only refs minted by the current accessibility snapshot and names
@@ -20,6 +20,8 @@
 //! # Example
 //!
 //! ```no_run
+//! # #[cfg(feature = "engine")]
+//! # mod engine_example {
 //! use std::collections::BTreeMap;
 //! use tinybrowser::{Browser, NavigateRequest, SessionOptions};
 //! use tinybrowser_control::{JevController, TaskRequest};
@@ -39,16 +41,19 @@
 //! println!("{:?}: {} actions", result.status, result.steps.len());
 //! # Ok(())
 //! # }
+//! # }
 //! ```
 
 mod error;
 mod policy;
 mod types;
 
-use tinybrowser::{Action, ActionOutcome, Browser, SessionId, Snapshot, SnapshotRequest, errors};
+#[cfg(feature = "engine")]
+use tinybrowser::Browser;
+use tinybrowser_bus::{Action, ActionOutcome, SessionId, Snapshot, SnapshotRequest, errors};
 use tinyjevclient::Client;
 
-pub use error::{Error, Result};
+pub use error::{BrowserControlError, Error, Result};
 pub use types::{
     ControlLimits, Decision, Operation, StepOutcome, StepRecord, TaskRequest, TaskResult,
     TaskStatus,
@@ -61,35 +66,53 @@ pub struct JevController {
     limits: ControlLimits,
 }
 
-trait BrowserControl {
-    async fn snapshot(
+/// Browser operations needed by the Jev loop. Hosts may implement this over `TinyBus`.
+pub trait BrowserControl {
+    /// Read the current accessibility snapshot for a session.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BrowserControlError`] when the session is unavailable or the
+    /// browser cannot capture its page.
+    fn snapshot(
         &self,
         session: &SessionId,
         request: &SnapshotRequest,
-    ) -> tinybrowser::Result<Snapshot>;
+    ) -> impl std::future::Future<Output = std::result::Result<Snapshot, BrowserControlError>> + Send;
 
-    async fn perform(
+    /// Perform one typed action in that session.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BrowserControlError`] when the action is refused, its target
+    /// is stale, or the browser cannot complete it.
+    fn perform(
         &self,
         session: &SessionId,
         action: &Action,
-    ) -> tinybrowser::Result<ActionOutcome>;
+    ) -> impl std::future::Future<Output = std::result::Result<ActionOutcome, BrowserControlError>> + Send;
 }
 
+#[cfg(feature = "engine")]
 impl BrowserControl for Browser {
     async fn snapshot(
         &self,
         session: &SessionId,
         request: &SnapshotRequest,
-    ) -> tinybrowser::Result<Snapshot> {
-        Browser::snapshot(self, session, request).await
+    ) -> std::result::Result<Snapshot, BrowserControlError> {
+        Browser::snapshot(self, session, request)
+            .await
+            .map_err(Into::into)
     }
 
     async fn perform(
         &self,
         session: &SessionId,
         action: &Action,
-    ) -> tinybrowser::Result<ActionOutcome> {
-        Browser::perform(self, session, action).await
+    ) -> std::result::Result<ActionOutcome, BrowserControlError> {
+        Browser::perform(self, session, action)
+            .await
+            .map_err(Into::into)
     }
 }
 
@@ -141,7 +164,7 @@ impl JevController {
     pub async fn decide(
         &self,
         task: &TaskRequest,
-        snapshot: &tinybrowser::Snapshot,
+        snapshot: &Snapshot,
         history: &[StepRecord],
     ) -> Result<Decision> {
         let request = policy::build_request(task, snapshot, history)?;
@@ -163,7 +186,7 @@ impl JevController {
     /// non-recoverable browser failures.
     pub async fn run(
         &self,
-        browser: &Browser,
+        browser: &impl BrowserControl,
         session: &SessionId,
         task: &TaskRequest,
     ) -> Result<TaskResult> {
@@ -281,5 +304,5 @@ impl JevController {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "engine"))]
 mod test;

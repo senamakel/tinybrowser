@@ -1,5 +1,6 @@
 //! End-to-end Jev control against a real browser and local mock provider.
 
+#![cfg(feature = "engine")]
 #![allow(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
 
 use std::collections::BTreeMap;
