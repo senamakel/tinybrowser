@@ -528,6 +528,43 @@ async fn a_fill_that_navigates_keeps_the_input_available_on_the_new_page() {
 }
 
 #[tokio::test]
+async fn a_same_url_form_replacement_keeps_the_input_available() {
+    let before = snapshot();
+    let mut after = before.clone();
+    after.tree = "textbox \"Next form\" @e1\nbutton \"Continue\" @e2".to_owned();
+    after.refs = vec![
+        element("e1", "textbox", "Next form"),
+        element("e2", "button", "Continue"),
+    ];
+    let mut fill = decision(Operation::Fill, Some(element("e1", "textbox", "Query")));
+    fill.input_name = Some("query".to_owned());
+    let decisions = FakeDecisions::new([fill, decision(Operation::Blocked, None)]);
+    let task = TaskRequest::new("fill the next form")
+        .with_inputs(BTreeMap::from([("query".to_owned(), "rust".to_owned())]));
+    let result = controller()
+        .run_with(
+            &FakeBrowser::new([before, after.clone()]),
+            &decisions,
+            &SessionId::new("session"),
+            &task,
+        )
+        .await
+        .expect("task result");
+
+    assert_eq!(result.status, TaskStatus::Blocked);
+    assert_eq!(
+        *decisions.context_flags.lock().expect("context flags lock"),
+        [(false, false), (false, false)]
+    );
+    let next_request = policy::build_request(&task, &after, &result.steps, false, false)
+        .expect("input remains available on replacement form");
+    let Question::Choice(operations) = &next_request.questions["operation"] else {
+        panic!("operation must be a choice");
+    };
+    assert!(operations.criteria.contains_key("FILL"));
+}
+
+#[tokio::test]
 async fn an_unconfirmed_form_goal_selects_the_current_submit_ref_and_preserves_approval() {
     let before = Snapshot {
         url: "https://www.selenium.dev/selenium/web/web-form.html".to_owned(),

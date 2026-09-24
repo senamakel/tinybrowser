@@ -148,6 +148,10 @@ fn fill_stayed_on_page(
         && matches!(outcome, StepOutcome::Acted)
         && before.url == after.url
         && before.title == after.title
+        && decision
+            .target
+            .as_ref()
+            .is_some_and(|target| after.refs.contains(target))
 }
 
 impl DecisionSource for JevController {
