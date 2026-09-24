@@ -103,8 +103,11 @@ PY
     COVERAGE_FIXTURE="$scratch/wrapper-good.json" \
     "$script_dir/check-file-coverage.sh" 90 "$scratch/wrapped.json" > "$scratch/wrapped.out"
   grep -q 'crates/example/src/ops.rs' "$scratch/wrapped.out"
-  if PATH="$scratch/fakebin:$PATH" COVERAGE_FIXTURE="$scratch/wrapper-good.json" \
-      "$script_dir/check-file-coverage.sh" 90 "$scratch/not-opted-in.json" > "$scratch/not-opted-in.out" 2>&1; then
+  if (
+      unset TINYBROWSER_LIVE_TESTS
+      PATH="$scratch/fakebin:$PATH" COVERAGE_FIXTURE="$scratch/wrapper-good.json" \
+        "$script_dir/check-file-coverage.sh" 90 "$scratch/not-opted-in.json" > "$scratch/not-opted-in.out" 2>&1
+  ); then
     echo "coverage gate accepted missing live-test opt-in" >&2
     exit 1
   fi
