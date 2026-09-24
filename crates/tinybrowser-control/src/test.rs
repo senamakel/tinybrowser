@@ -340,6 +340,9 @@ fn irreversible_policy_covers_consequential_clicks_and_unlabeled_controls() {
     )));
     for label in [
         "Submit application",
+        "Submit payment",
+        "Submit order",
+        "Submit transfer",
         "Transfer funds",
         "Authorize payment",
         "Approve access",
@@ -347,7 +350,6 @@ fn irreversible_policy_covers_consequential_clicks_and_unlabeled_controls() {
         "Save changes",
         "Share document",
         "Invite member",
-        "Submit search",
     ] {
         assert!(
             policy::is_irreversible(&decision(
@@ -373,6 +375,15 @@ fn irreversible_policy_covers_consequential_clicks_and_unlabeled_controls() {
         Operation::Click,
         Some(element("e2", "button", "Search"))
     )));
+    for label in ["Submit search", "Submit query", "Submit filters"] {
+        assert!(
+            !policy::is_irreversible(&decision(
+                Operation::Click,
+                Some(element("e2", "button", label))
+            )),
+            "{label} should remain available"
+        );
+    }
     assert!(policy::is_irreversible(&decision(
         Operation::Click,
         Some(element("e2", "link", ""))
@@ -555,6 +566,31 @@ async fn the_runner_stops_before_an_irreversible_click() {
             "{label}"
         );
     }
+}
+
+#[tokio::test]
+async fn the_runner_can_submit_a_search_without_confirmation() {
+    let browser = FakeBrowser::new([snapshot(), snapshot()]);
+    let result = controller()
+        .with_limits(ControlLimits {
+            max_steps: 1,
+            ..ControlLimits::default()
+        })
+        .run_with(
+            &browser,
+            &FakeDecisions::new([decision(
+                Operation::Click,
+                Some(element("e8", "button", "Submit search")),
+            )]),
+            &SessionId::new("session"),
+            &TaskRequest::new("search"),
+        )
+        .await
+        .expect("task result");
+
+    assert_eq!(result.status, TaskStatus::Budget);
+    assert_eq!(result.steps.len(), 1);
+    assert_eq!(browser.actions.lock().expect("action lock").len(), 1);
 }
 
 #[tokio::test]

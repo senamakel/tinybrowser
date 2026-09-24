@@ -358,6 +358,30 @@ pub(crate) fn is_irreversible(decision: &Decision) -> bool {
         " {} ",
         normalized.split_whitespace().collect::<Vec<_>>().join(" ")
     );
+    // A bare Submit is ambiguous. Otherwise, require evidence in the label of
+    // a consequential form; search and filter submissions stay available.
+    let consequential_submit = label.contains(" submit ")
+        && (label.trim() == "submit"
+            || [
+                " payment ",
+                " order ",
+                " transfer ",
+                " application ",
+                " booking ",
+                " reservation ",
+                " purchase ",
+                " checkout ",
+                " account ",
+                " request ",
+                " feedback ",
+                " message ",
+                " review ",
+                " report ",
+                " form ",
+                " transaction ",
+            ]
+            .iter()
+            .any(|context| label.contains(context)));
     [
         " buy ",
         " purchase ",
@@ -367,7 +391,6 @@ pub(crate) fn is_irreversible(decision: &Decision) -> bool {
         " confirm ",
         " book ",
         " reserve ",
-        " submit ",
         " transfer ",
         " authorize ",
         " approve ",
@@ -387,6 +410,7 @@ pub(crate) fn is_irreversible(decision: &Decision) -> bool {
     ]
     .iter()
     .any(|needle| label.contains(needle))
+        || consequential_submit
 }
 
 pub(crate) fn page_changed(before: &Snapshot, after: &Snapshot) -> bool {
