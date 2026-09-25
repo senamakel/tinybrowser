@@ -37,13 +37,14 @@ tinybrowser = { path = "crates/tinybrowser" }
 # TinyBus defines the message types, interface macro, and frozen module ABI
 # used by the generated integration. Socket and CLI features are unnecessary
 # here.
-tinybus = { path = "vendor/tinybus/crates/tinybus", version = "0.1.0", default-features = false, features = [
+tinybus = { version = "=0.1.2", default-features = false, features = [
     "macros",
     "modules",
 ] }
 # The module-side SDK owns the isolated runtime and exports the ABI entrypoints
 # required by TinyBus's dynamic loader.
-tinybus-module = { path = "vendor/tinybus/crates/tinybus-module", version = "0.1.0" }
+tinybus-module = "=0.1.2"
+
 # Jev makes bounded, typed decisions for the agentic browser-control loop. It is
 # pinned by the `vendor/tinyjevclient` gitlink so its wire behavior is reviewed
 # together with each update.
@@ -95,3 +96,7 @@ private_intra_doc_links = "warn"
 lto = "thin"
 codegen-units = 1
 strip = "debuginfo"
+
+[patch.crates-io]
+tinybus = { path = "vendor/tinybus/crates/tinybus" }
+tinybus-module = { path = "vendor/tinybus/crates/tinybus-module" }
