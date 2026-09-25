@@ -127,6 +127,33 @@ trait DecisionSource {
     ) -> Result<Decision>;
 }
 
+fn completed_single_input_on_page(
+    task: &TaskRequest,
+    snapshot: &Snapshot,
+    observation: Option<&(String, String, String)>,
+) -> bool {
+    task.inputs.len() == 1
+        && observation.is_some_and(|(url, title, tree)| {
+            url == &snapshot.url && title == &snapshot.title && tree == &snapshot.tree
+        })
+}
+
+fn fill_stayed_on_page(
+    decision: &Decision,
+    outcome: &StepOutcome,
+    before: &Snapshot,
+    after: &Snapshot,
+) -> bool {
+    decision.operation == Operation::Fill
+        && matches!(outcome, StepOutcome::Acted)
+        && before.url == after.url
+        && before.title == after.title
+        && decision
+            .target
+            .as_ref()
+            .is_some_and(|target| after.refs.contains(target))
+}
+
 impl DecisionSource for JevController {
     async fn decide(
         &self,
@@ -223,11 +250,11 @@ impl JevController {
         let mut history = Vec::new();
         let mut unchanged = 0_usize;
         let mut done_unconfirmed = false;
-        let mut filled_url = None;
+        let mut filled_observation: Option<(String, String, String)> = None;
 
         for step in 1..=self.limits.max_steps {
             let fill_already_entered =
-                task.inputs.len() == 1 && filled_url.as_deref() == Some(snapshot.url.as_str());
+                completed_single_input_on_page(task, &snapshot, filled_observation.as_ref());
             let decision = decisions
                 .decide(
                     task,
@@ -281,8 +308,11 @@ impl JevController {
             let after = browser.snapshot(session, &snapshot_request).await?;
             let changed = policy::page_changed(&snapshot, &after);
             unchanged = policy::next_unchanged(unchanged, decision.operation, changed);
-            if decision.operation == Operation::Fill && matches!(&outcome, StepOutcome::Acted) {
-                filled_url = Some(snapshot.url.clone());
+            if fill_stayed_on_page(&decision, &outcome, &snapshot, &after) {
+                filled_observation =
+                    Some((after.url.clone(), after.title.clone(), after.tree.clone()));
+            } else if changed {
+                filled_observation = None;
             }
             history.push(StepRecord {
                 step,

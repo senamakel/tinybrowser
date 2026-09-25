@@ -174,14 +174,14 @@ impl BrowserControl for FakeBrowser {
 #[derive(Debug)]
 struct FakeDecisions {
     decisions: Mutex<VecDeque<Result<Decision>>>,
-    offered: Mutex<Vec<(bool, bool)>>,
+    context_flags: Mutex<Vec<(bool, bool)>>,
 }
 
 impl FakeDecisions {
     fn new(decisions: impl IntoIterator<Item = Decision>) -> Self {
         Self {
             decisions: Mutex::new(decisions.into_iter().map(Ok).collect()),
-            offered: Mutex::new(Vec::new()),
+            context_flags: Mutex::new(Vec::new()),
         }
     }
 }
@@ -195,9 +195,9 @@ impl DecisionSource for FakeDecisions {
         done_unconfirmed: bool,
         fill_already_entered: bool,
     ) -> impl std::future::Future<Output = Result<Decision>> {
-        self.offered
+        self.context_flags
             .lock()
-            .expect("offered lock")
+            .expect("context flags lock")
             .push((done_unconfirmed, fill_already_entered));
         std::future::ready(
             self.decisions
@@ -394,8 +394,8 @@ async fn an_unconfirmed_done_reconsiders_the_visible_submit_button() {
         .tree
         .push_str("\ntextbox \"Query\" value=\"rust\" @e1");
     let mut submitted = filled.clone();
-    submitted.url = "https://example.com/results".to_owned();
-    submitted.tree = "heading \"Results\" @e4".to_owned();
+    // A title-only change on the same URL makes FILL available again.
+    submitted.title = "Results".to_owned();
 
     let mut fill = decision(Operation::Fill, Some(element("e1", "textbox", "Query")));
     fill.input_name = Some("query".to_owned());
@@ -419,9 +419,15 @@ async fn an_unconfirmed_done_reconsiders_the_visible_submit_button() {
     assert_eq!(result.steps[0].decision.operation, Operation::Fill);
     assert_eq!(result.steps[1].decision.operation, Operation::Click);
     assert_eq!(browser.actions.lock().expect("actions").len(), 2);
+    let contexts = decisions.context_flags.lock().expect("context flags lock");
+    assert_eq!(contexts.len(), 4);
+    assert_eq!(contexts[0], (false, false), "initial Fill");
+    assert_eq!(contexts[1], (false, true), "unconfirmed Done after Fill");
+    assert_eq!(contexts[2], (true, true), "Click on the still-filled page");
     assert_eq!(
-        *decisions.offered.lock().expect("offered lock"),
-        [(false, false), (false, true), (true, true), (false, false)]
+        contexts[3],
+        (false, false),
+        "confirmed Done after title change"
     );
 }
 
@@ -447,6 +453,115 @@ async fn repeated_unconfirmed_done_stops_within_the_decision_budget() {
     assert_eq!(result.status, TaskStatus::DoneUnconfirmed);
     assert!(result.steps.is_empty());
     assert!(browser.actions.lock().expect("actions").is_empty());
+}
+
+#[tokio::test]
+async fn filling_one_of_multiple_inputs_keeps_fill_available() {
+    let before = snapshot();
+    let mut after = before.clone();
+    after
+        .tree
+        .push_str("\ntextbox \"Query\" value=\"rust\" @e1");
+    let mut fill = decision(Operation::Fill, Some(element("e1", "textbox", "Query")));
+    fill.input_name = Some("query".to_owned());
+    let decisions = FakeDecisions::new([fill, decision(Operation::Blocked, None)]);
+    let task = TaskRequest::new("fill query and site").with_inputs(BTreeMap::from([
+        ("query".to_owned(), "rust".to_owned()),
+        ("site".to_owned(), "example.com".to_owned()),
+    ]));
+    let result = controller()
+        .run_with(
+            &FakeBrowser::new([before, after.clone()]),
+            &decisions,
+            &SessionId::new("session"),
+            &task,
+        )
+        .await
+        .expect("task result");
+
+    assert_eq!(result.status, TaskStatus::Blocked);
+    assert_eq!(
+        *decisions.context_flags.lock().expect("context flags lock"),
+        [(false, false), (false, false)]
+    );
+    let second_request = policy::build_request(&task, &after, &result.steps, false, false)
+        .expect("second field remains fillable");
+    let Question::Choice(operations) = &second_request.questions["operation"] else {
+        panic!("operation must be a choice");
+    };
+    assert!(operations.criteria.contains_key("FILL"));
+    assert!(second_request.questions.contains_key("fill_input"));
+}
+
+#[tokio::test]
+async fn a_fill_that_navigates_keeps_the_input_available_on_the_new_page() {
+    let before = snapshot();
+    let mut after = before.clone();
+    after.url = "https://example.com/next-form".to_owned();
+    after.title = "Next form".to_owned();
+    let mut fill = decision(Operation::Fill, Some(element("e1", "textbox", "Query")));
+    fill.input_name = Some("query".to_owned());
+    let decisions = FakeDecisions::new([fill, decision(Operation::Blocked, None)]);
+    let task = TaskRequest::new("fill both forms")
+        .with_inputs(BTreeMap::from([("query".to_owned(), "rust".to_owned())]));
+    let result = controller()
+        .run_with(
+            &FakeBrowser::new([before, after.clone()]),
+            &decisions,
+            &SessionId::new("session"),
+            &task,
+        )
+        .await
+        .expect("task result");
+
+    assert_eq!(result.status, TaskStatus::Blocked);
+    assert_eq!(
+        *decisions.context_flags.lock().expect("context flags lock"),
+        [(false, false), (false, false)]
+    );
+    let next_request = policy::build_request(&task, &after, &result.steps, false, false)
+        .expect("input remains available");
+    let Question::Choice(operations) = &next_request.questions["operation"] else {
+        panic!("operation must be a choice");
+    };
+    assert!(operations.criteria.contains_key("FILL"));
+}
+
+#[tokio::test]
+async fn a_same_url_form_replacement_keeps_the_input_available() {
+    let before = snapshot();
+    let mut after = before.clone();
+    after.tree = "textbox \"Next form\" @e1\nbutton \"Continue\" @e2".to_owned();
+    after.refs = vec![
+        element("e1", "textbox", "Next form"),
+        element("e2", "button", "Continue"),
+    ];
+    let mut fill = decision(Operation::Fill, Some(element("e1", "textbox", "Query")));
+    fill.input_name = Some("query".to_owned());
+    let decisions = FakeDecisions::new([fill, decision(Operation::Blocked, None)]);
+    let task = TaskRequest::new("fill the next form")
+        .with_inputs(BTreeMap::from([("query".to_owned(), "rust".to_owned())]));
+    let result = controller()
+        .run_with(
+            &FakeBrowser::new([before, after.clone()]),
+            &decisions,
+            &SessionId::new("session"),
+            &task,
+        )
+        .await
+        .expect("task result");
+
+    assert_eq!(result.status, TaskStatus::Blocked);
+    assert_eq!(
+        *decisions.context_flags.lock().expect("context flags lock"),
+        [(false, false), (false, false)]
+    );
+    let next_request = policy::build_request(&task, &after, &result.steps, false, false)
+        .expect("input remains available on replacement form");
+    let Question::Choice(operations) = &next_request.questions["operation"] else {
+        panic!("operation must be a choice");
+    };
+    assert!(operations.criteria.contains_key("FILL"));
 }
 
 #[tokio::test]
