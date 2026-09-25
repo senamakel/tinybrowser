@@ -3,15 +3,10 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
-      bump:
-        description: Version bump to release
-        type: choice
+      release_version:
+        description: Version already merged to protected main (for example 0.2.2)
+        type: string
         required: true
-        options:
-          - patch
-          - minor
-          - major
-          - current
 
 concurrency:
   group: release-${{ github.ref_name }}
@@ -82,6 +77,9 @@ jobs:
       - name: Verify the coverage gate
         run: .github/scripts/test-check-file-coverage.sh
 
+      - name: Verify protected release tagging
+        run: .github/scripts/test-tag-reviewed-release.sh
+
       - name: Require 90% line coverage in every production source file
         run: .github/scripts/check-file-coverage.sh 90 target/coverage.json
 
@@ -90,113 +88,11 @@ jobs:
           RUSTDOCFLAGS: -D warnings
         run: cargo doc --no-deps --all-features
 
-      - name: Compute next version
+      - name: Tag reviewed release source
         id: version
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          metadata="$(cargo metadata --format-version 1 --no-deps)"
-          crate_name="$(jq -r --arg name "$RELEASE_PACKAGE" \
-            '.packages[] | select(.name == $name) | .name' <<< "$metadata")"
-          current_version="$(jq -r --arg name "$RELEASE_PACKAGE" \
-            '.packages[] | select(.name == $name) | .version' <<< "$metadata")"
-          if [[ -z "$crate_name" || "$crate_name" == "null" ]]; then
-            echo "Could not resolve the crate name" >&2
-            exit 1
-          fi
-          if [[ -z "$current_version" || "$current_version" == "null" ]]; then
-            echo "Could not resolve the current crate version" >&2
-            exit 1
-          fi
-
-          IFS=. read -r major minor patch <<< "$current_version"
-          case "${{ inputs.bump }}" in
-            current)
-              ;;
-            major)
-              major=$((major + 1))
-              minor=0
-              patch=0
-              ;;
-            minor)
-              minor=$((minor + 1))
-              patch=0
-              ;;
-            patch)
-              patch=$((patch + 1))
-              ;;
-            *)
-              echo "Unsupported bump: ${{ inputs.bump }}" >&2
-              exit 1
-              ;;
-          esac
-
-          next_version="${major}.${minor}.${patch}"
-          tag="v${next_version}"
-          git fetch --tags origin
-
-          if git rev-parse --verify --quiet "refs/tags/${tag}"; then
-            if [[ "${{ inputs.bump }}" != "current" ]]; then
-              echo "Tag ${tag} already exists" >&2
-              exit 1
-            fi
-            tagged_version="$(
-              git show "${tag}:Cargo.toml" \
-                | sed -n '/^\[workspace\.package\]/,/^\[/ s/^version = "\([^"]*\)"/\1/p' \
-                | head -n 1
-            )"
-            if [[ "$tagged_version" != "$current_version" ]]; then
-              echo "Tag ${tag} does not contain version ${current_version}" >&2
-              exit 1
-            fi
-          elif [[ "${{ inputs.bump }}" == "current" ]]; then
-            echo "Tag ${tag} does not exist; choose a semantic version bump" >&2
-            exit 1
-          fi
-
-          {
-            echo "crate_name=${crate_name}"
-            echo "current_version=${current_version}"
-            echo "next_version=${next_version}"
-            echo "tag=${tag}"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Update crate version
-        if: ${{ inputs.bump != 'current' }}
         env:
-          CRATE_NAME: ${{ steps.version.outputs.crate_name }}
-          NEXT_VERSION: ${{ steps.version.outputs.next_version }}
-        run: |
-          set -euo pipefail
-          # One version for the whole workspace: every member inherits it with
-          # `version.workspace = true`, so this is the only edit needed.
-          perl -0pi -e 's/(\[workspace\.package\][\s\S]*?\nversion = ")[^"]+(")/$1$ENV{NEXT_VERSION}$2/' Cargo.toml
-          # `--workspace` re-resolves the local packages only, which is what a
-          # version bump changes. `-p <name> --precise` cannot express "and the
-          # other member moved too".
-          cargo update --workspace
-          released="$(cargo metadata --format-version 1 --no-deps \
-            | jq -r --arg name "$CRATE_NAME" \
-              '.packages[] | select(.name == $name) | .version')"
-          if [[ "$released" != "$NEXT_VERSION" ]]; then
-            echo "version bump did not take: expected ${NEXT_VERSION}, got ${released}" >&2
-            exit 1
-          fi
-
-      - name: Commit version bump and tag
-        if: ${{ inputs.bump != 'current' }}
-        env:
-          RELEASE_TAG: ${{ steps.version.outputs.tag }}
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.toml Cargo.lock
-          git commit -m "Release ${RELEASE_TAG}"
-          git tag -a "${RELEASE_TAG}" -m "Release ${RELEASE_TAG}"
-          git push origin "HEAD:${GITHUB_REF_NAME}"
-          git push origin "${RELEASE_TAG}"
+          EXPECTED_VERSION: ${{ inputs.release_version }}
+        run: .github/scripts/tag-reviewed-release.sh
 
   native-bundles:
     name: Rust module bundle (${{ matrix.id }})

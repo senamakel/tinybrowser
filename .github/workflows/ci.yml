@@ -109,6 +109,9 @@ jobs:
       - name: Verify the coverage gate
         run: .github/scripts/test-check-file-coverage.sh
 
+      - name: Verify protected release tagging
+        run: .github/scripts/test-tag-reviewed-release.sh
+
       - name: Require 90% line coverage in every production source file
         run: .github/scripts/check-file-coverage.sh 90 coverage.json
 
