@@ -26,8 +26,9 @@ distributable without also shipping the TinyBus host runtime.
 
 ## Verification
 
-CI exercises the bus interface through TinyBus's in-memory transport, enforces
-90% line coverage in every source file, and builds the `cdylib`. The release
+CI exercises the bus interface through TinyBus's in-memory transport and
+the loopback-only live Chrome suite, enforces 90% line coverage in every
+production source file, and builds the `cdylib`. The release
 workflow builds each native module from the tagged source and records its exact
 digest in the adjacent allowlist. After publishing, it downloads the Ubuntu
 x86_64 archive through TinyBus's GitHub release API and calls `Greet` over an

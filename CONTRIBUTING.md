@@ -18,11 +18,13 @@ cargo build --all-targets --all-features
 cargo test --all-features
 ```
 
-CI also requires at least 90% line coverage in every source file. After
-installing `cargo-llvm-cov`, run the same gate locally:
+CI also requires at least 90% line coverage in every production source file.
+The gate runs the loopback-only live Chrome tests and fails if Chrome is
+unavailable; install Chrome and `cargo-llvm-cov` before running it locally:
 
 ```sh
-.github/scripts/check-file-coverage.sh 90 target/coverage.json
+TINYBROWSER_LIVE_TESTS=1 .github/scripts/check-file-coverage.sh 90 target/coverage.json
+.github/scripts/test-check-file-coverage.sh
 ```
 
 The bundled example should also run:

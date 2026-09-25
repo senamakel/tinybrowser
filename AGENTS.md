@@ -264,9 +264,11 @@ gitlink here. Their licences and roles are recorded in `THIRD-PARTY.md`.
   quietly does nothing reports green for a build in which nothing was checked.
 - The unit suites must not need a browser. Anything that would is a sign the
   judgement belongs in a pure function that can be tested without one.
-- Maintain at least 90% line coverage in every source file. Add or update tests
-  with every behavior change, and note any deliberately untested edge case in
-  the pull request description.
+- Maintain at least 90% line coverage in every production source file. The
+  coverage gate opts into the hermetic live Chrome tests; `test.rs` modules,
+  integration-test sources, generated vendor code, and worktrees do not count
+  as production files. Add or update tests with every behavior change, and note
+  any deliberately untested edge case in the pull request description.
 
 Write the test first when fixing a bug: a failing test that reproduces the
 report, then the fix that turns it green.
