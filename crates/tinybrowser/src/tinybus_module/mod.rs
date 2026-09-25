@@ -199,7 +199,7 @@ async fn setup(connection: Connection) -> BusResult<()> {
     unreachable_pub,
     reason = "generated C ABI symbols are documented by the TinyBus module SDK"
 )]
-mod exports {
+pub(crate) mod exports {
     tinybus_module::module_export! {
         setup = super::setup,
         // Two threads: one to serve calls, one so a long navigation does not

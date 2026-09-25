@@ -103,6 +103,10 @@ mod snapshot;
 
 pub mod tinybus_module;
 
+/// Constructs this module for registration with an in-process TinyBus host.
+#[cfg(feature = "linked")]
+pub use tinybus_module::exports::linked_module;
+
 pub use engine::Browser;
 pub use error::{Error, Result};
 
