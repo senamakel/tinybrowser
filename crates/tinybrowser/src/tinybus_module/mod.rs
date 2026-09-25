@@ -200,7 +200,7 @@ async fn setup(connection: Connection) -> BusResult<()> {
     reason = "generated C ABI symbols are documented by the TinyBus module SDK"
 )]
 pub(crate) mod exports {
-    tinybus_module::module_export! {
+    tinybus_module::module_export_optional_static! {
         setup = super::setup,
         // Two threads: one to serve calls, one so a long navigation does not
         // block the call that would close the session it is stuck in.

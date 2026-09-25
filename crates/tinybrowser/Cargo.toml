@@ -71,7 +71,8 @@ futures-util = { version = "0.3", default-features = false, features = ["sink", 
 
 [features]
 default = []
-linked = []
+linked = ["static-link"]
+static-link = []
 
 [lints]
 workspace = true
