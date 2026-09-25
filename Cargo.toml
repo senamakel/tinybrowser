@@ -48,7 +48,7 @@ tinybus-module = "=0.1.2"
 # Jev makes bounded, typed decisions for the agentic browser-control loop. It is
 # pinned by the `vendor/tinyjevclient` gitlink so its wire behavior is reviewed
 # together with each update.
-tinyjevclient = { path = "vendor/tinyjevclient/crates/tinyjevclient" }
+tinyjevclient = "=0.2.1"
 # Derive macros for the crate-wide error type in `crates/template/src/error/`.
 # Every dependency entry should carry a comment like this one saying why it is
 # here.
@@ -100,3 +100,4 @@ strip = "debuginfo"
 [patch.crates-io]
 tinybus = { path = "vendor/tinybus/crates/tinybus" }
 tinybus-module = { path = "vendor/tinybus/crates/tinybus-module" }
+tinyjevclient = { path = "vendor/tinyjevclient/crates/tinyjevclient" }
