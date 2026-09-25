@@ -28,7 +28,7 @@ run_tag() {
   (
     cd "$scratch/work"
     PATH="$scratch/fakebin:$PATH" \
-      TEST_VERSION=0.2.2 EXPECTED_VERSION="$1" \
+      TEST_VERSION="${3:-0.2.2}" EXPECTED_VERSION="$1" \
       GITHUB_REF="${2:-refs/heads/main}" \
       GITHUB_OUTPUT="$scratch/outputs" RELEASE_PACKAGE=tinybrowser \
       "$script_dir/tag-reviewed-release.sh"
@@ -66,9 +66,19 @@ grep -q '^tag=v0.2.2$' "$scratch/outputs"
 run_tag 0.2.2 > "$scratch/existing.out"
 grep -q 'using existing tag v0.2.2' "$scratch/existing.out"
 
+git -C "$scratch/work" update-ref refs/tags/v0.2.3 HEAD
+git -C "$scratch/work" push -q origin refs/tags/v0.2.3
+if run_tag 0.2.3 refs/heads/main 0.2.3 > "$scratch/lightweight.out" 2>&1; then
+  echo "accepted a lightweight release tag" >&2
+  exit 1
+fi
+grep -q 'must be annotated' "$scratch/lightweight.out"
+
 printf 'later reviewed commit\n' >> "$scratch/work/source.txt"
 git -C "$scratch/work" commit -qam 'Later reviewed source'
 git -C "$scratch/work" push -q origin main
+[[ "$(git -C "$scratch/work" ls-remote origin refs/heads/main | awk '{print $1}')" == \
+   "$(git -C "$scratch/work" rev-parse HEAD)" ]]
 if run_tag 0.2.2 > "$scratch/stale-tag.out" 2>&1; then
   echo "accepted a tag pointing to an older commit" >&2
   exit 1

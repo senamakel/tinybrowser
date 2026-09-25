@@ -43,6 +43,10 @@ fi
 tag="v${current_version}"
 git fetch --tags origin
 if git rev-parse --verify --quiet "refs/tags/${tag}" >/dev/null; then
+  if [[ "$(git cat-file -t "refs/tags/${tag}")" != tag ]]; then
+    echo "existing release tag $tag must be annotated" >&2
+    exit 1
+  fi
   tagged_sha="$(git rev-list -n 1 "$tag")"
   if [[ "$tagged_sha" != "$head_sha" ]]; then
     echo "existing tag $tag points to $tagged_sha, not reviewed main $head_sha" >&2
