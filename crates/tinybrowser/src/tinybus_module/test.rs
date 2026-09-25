@@ -226,7 +226,7 @@ fn options() -> tinybrowser_bus::SessionOptions {
     }
 }
 
-/// Serves one page on loopback and returns its URL.
+/// Serves one page on loopback for every browser request and returns its URL.
 async fn serve(body: &'static str) -> String {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
@@ -234,24 +234,50 @@ async fn serve(body: &'static str) -> String {
     let address = listener.local_addr().expect("has an address");
 
     tokio::spawn(async move {
-        let Ok((mut stream, _)) = listener.accept().await else {
-            return;
-        };
-        let mut scratch = [0_u8; 2048];
-        let _ = stream.read(&mut scratch).await;
-        let document = format!(
-            "<!doctype html><html><head><title>bus</title></head><body>{body}</body></html>"
-        );
-        let response = format!(
-            "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\
-             Content-Length: {}\r\nConnection: close\r\n\r\n{document}",
-            document.len()
-        );
-        let _ = stream.write_all(response.as_bytes()).await;
-        let _ = stream.shutdown().await;
+        while let Ok((mut stream, _)) = listener.accept().await {
+            tokio::spawn(async move {
+                let mut scratch = [0_u8; 2048];
+                let _ = stream.read(&mut scratch).await;
+                let document = format!(
+                    "<!doctype html><html><head><title>bus</title></head><body>{body}</body></html>"
+                );
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\
+                     Content-Length: {}\r\nConnection: close\r\n\r\n{document}",
+                    document.len()
+                );
+                let _ = stream.write_all(response.as_bytes()).await;
+                let _ = stream.shutdown().await;
+            });
+        }
     });
 
     format!("http://{address}/")
+}
+
+#[tokio::test]
+async fn page_fixture_serves_repeated_document_requests() {
+    let url = serve("<h1>Bus</h1>").await;
+    let address = url
+        .strip_prefix("http://")
+        .expect("loopback http URL")
+        .trim_end_matches('/');
+    for _ in 0..2 {
+        let mut stream = tokio::net::TcpStream::connect(address)
+            .await
+            .expect("fixture accepts another connection");
+        stream
+            .write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+            .await
+            .expect("send request");
+        let mut response = String::new();
+        stream
+            .read_to_string(&mut response)
+            .await
+            .expect("read response");
+        assert!(response.contains("200 OK"));
+        assert!(response.contains("<h1>Bus</h1>"));
+    }
 }
 
 async fn serve_download() -> String {
