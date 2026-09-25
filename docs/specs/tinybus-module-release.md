@@ -23,6 +23,9 @@ distributable without also shipping the TinyBus host runtime.
   images exist for the architecture.
 - TinyBus itself remains a pinned SDK submodule and is not shipped as a release
   asset from this repository.
+- A version bump changes the workspace manifest and lockfile in a reviewed PR.
+  The release workflow tags the checked, protected `main` commit; it never
+  pushes a version commit directly to `main`.
 
 ## Verification
 

@@ -7,5 +7,5 @@ Linked specification: [`../specs/tinybus-module-release.md`](../specs/tinybus-mo
 3. Exercise the declared interface over the real in-memory bus.
 4. Replace TinyBus host bundles with tagged `tinybrowser` module archives for
    every supported platform runner and distribution container.
-5. Run the repository validation and coverage contracts, push `main`, and
-   trigger a patch release.
+5. Run the repository validation and coverage contracts, merge a version-bump
+   PR through protected `main`, then dispatch the release for that version.

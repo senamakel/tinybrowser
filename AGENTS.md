@@ -329,20 +329,22 @@ explicitly declined with a reason.
 
 ## Releases
 
-Releases run from `.github/workflows/release.yml` via a manual
-`workflow_dispatch` with a `patch` / `minor` / `major` bump; `current` resumes
-an interrupted release after its version commit and tag exist. The workflow
-re-runs the full validation suite, computes the next version, updates
-the root `[workspace.package]` version and `Cargo.lock`, commits and tags
-`vX.Y.Z`, builds `crates/tinybrowser` as a TinyBus module for every supported
-platform, pushes, and creates an immutable GitHub release with installable
-native packages.
+Prepare a release by changing the root `[workspace.package]` version and
+`Cargo.lock` in a focused PR, then merge it through protected `main` with its
+required checks. Run `.github/workflows/release.yml` manually with
+`release_version` equal to that merged version. The workflow re-runs the full
+validation suite, verifies that the checkout is the current protected main
+commit, creates or reuses an annotated `vX.Y.Z` tag on exactly that commit,
+builds `crates/tinybrowser` as a TinyBus module for every supported platform,
+and creates an immutable GitHub release with installable native packages. A
+rerun with the same version resumes only when its tag still points to that
+same main commit. The workflow never pushes a new commit to `main`.
 
 Consequently:
 
-- Do not hand-edit the `version` field in the root `[workspace.package]`; the
-  release workflow owns it. Every member inherits it with
-  `version.workspace = true`, so the whole workspace releases as one version.
+- Change the root version only in a reviewed release-version PR and update
+  `Cargo.lock` with it. Every member inherits `version.workspace = true`, so
+  the whole workspace releases as one version.
 - Follow semantic versioning. Any change to the public surface that is not
   purely additive is a breaking change and needs a major bump (pre-1.0: a minor
   bump).
