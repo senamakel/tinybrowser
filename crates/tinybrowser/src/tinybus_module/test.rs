@@ -322,7 +322,7 @@ async fn assert_download_members(
     let downloads: Vec<tinybrowser_bus::DownloadInfo> = proxy
         .call(names::methods::LIST_DOWNLOADS, (session.clone(),))
         .await?;
-    assert!(downloads.is_empty());
+    assert_eq!(downloads, [] as [tinybrowser_bus::DownloadInfo; 0]);
     let waited = proxy
         .call::<tinybrowser_bus::DownloadInfo>(
             names::methods::WAIT_DOWNLOAD,
@@ -436,7 +436,7 @@ async fn live_every_member_answers_over_a_real_bus() -> tinybus::Result<()> {
             (&handle.id, 0_u64, 64_u64 * 1024),
         )
         .await?;
-    assert!(!chunk.data.is_empty());
+    assert_ne!(chunk.data, "");
 
     proxy
         .call::<()>(names::methods::RELEASE_OUTPUT, (&handle.id,))

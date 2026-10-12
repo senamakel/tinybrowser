@@ -221,7 +221,7 @@ fn the_environment_supplies_no_extra_flags_by_default() {
     // Read rather than set: a test that mutates the environment races every
     // other test in the process, and the default is the case worth pinning.
     if std::env::var(ARGS_ENV).is_err() {
-        assert!(environment_args().is_empty());
+        assert_eq!(environment_args(), [] as [std::string::String; 0]);
     }
 }
 

@@ -451,7 +451,7 @@ async fn repeated_unconfirmed_done_stops_within_the_decision_budget() {
         .expect("task result");
 
     assert_eq!(result.status, TaskStatus::DoneUnconfirmed);
-    assert!(result.steps.is_empty());
+    assert_eq!(result.steps, [] as [types::StepRecord; 0]);
     assert!(browser.actions.lock().expect("actions").is_empty());
 }
 
@@ -881,7 +881,7 @@ async fn the_runner_accepts_only_independently_confirmed_done() {
         .expect("task result");
 
     assert_eq!(result.status, TaskStatus::Done);
-    assert!(result.steps.is_empty());
+    assert_eq!(result.steps, [] as [types::StepRecord; 0]);
 }
 
 #[tokio::test]

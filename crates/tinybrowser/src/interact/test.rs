@@ -65,7 +65,7 @@ fn a_character_outside_the_us_layout_gets_no_code_rather_than_a_wrong_one() {
     let stroke = parse("é").expect("parses");
 
     assert_eq!(stroke.key, "é");
-    assert!(stroke.code.is_empty());
+    assert_eq!(stroke.code, "");
 }
 
 #[test]

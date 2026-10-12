@@ -121,7 +121,7 @@ fn events_from_another_page_and_unknown_guids_are_ignored() {
         None,
         "page-1",
     ));
-    assert!(store.list().is_empty());
+    assert_eq!(store.list(), [] as [tinybrowser_bus::DownloadInfo; 0]);
 }
 
 #[tokio::test]

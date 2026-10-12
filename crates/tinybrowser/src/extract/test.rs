@@ -49,7 +49,7 @@ fn truncation_counts_characters_not_bytes() {
 fn a_zero_limit_yields_nothing_rather_than_panicking() {
     let (content, truncated) = truncate("hello".to_string(), 0);
 
-    assert!(content.is_empty());
+    assert_eq!(content, "");
     assert!(truncated);
 }
 
@@ -57,6 +57,6 @@ fn a_zero_limit_yields_nothing_rather_than_panicking() {
 fn empty_content_is_never_truncated() {
     let (content, truncated) = truncate(String::new(), 0);
 
-    assert!(content.is_empty());
+    assert_eq!(content, "");
     assert!(!truncated);
 }
