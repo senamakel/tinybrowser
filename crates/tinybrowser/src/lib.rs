@@ -103,7 +103,7 @@ mod snapshot;
 
 pub mod tinybus_module;
 
-/// Constructs this module for registration with an in-process TinyBus host.
+/// Constructs this module for registration with an in-process `TinyBus` host.
 #[cfg(feature = "static-link")]
 pub use tinybus_module::exports::linked_module;
 
