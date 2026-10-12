@@ -30,7 +30,10 @@ fn a_session_limit_of_zero_is_raised_to_one() {
 
 #[tokio::test]
 async fn a_fresh_engine_lists_no_sessions() {
-    assert_eq!(Browser::new().list_sessions().await, [] as [tinybrowser_bus::SessionInfo; 0]);
+    assert_eq!(
+        Browser::new().list_sessions().await,
+        [] as [tinybrowser_bus::SessionInfo; 0]
+    );
 }
 
 #[tokio::test]
@@ -124,5 +127,8 @@ async fn shutting_down_an_empty_engine_is_a_no_op() {
     let browser = Browser::new();
     browser.shutdown().await;
 
-    assert_eq!(browser.list_sessions().await, [] as [tinybrowser_bus::SessionInfo; 0]);
+    assert_eq!(
+        browser.list_sessions().await,
+        [] as [tinybrowser_bus::SessionInfo; 0]
+    );
 }

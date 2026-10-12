@@ -554,7 +554,10 @@ async fn live_sessions_are_listed_and_close_cleanly() {
     );
 
     browser.close_session(&session.id).await.expect("closes");
-    assert_eq!(browser.list_sessions().await, [] as [tinybrowser::SessionInfo; 0]);
+    assert_eq!(
+        browser.list_sessions().await,
+        [] as [tinybrowser::SessionInfo; 0]
+    );
 }
 
 /// Standard base64, for reassembling a held output.
@@ -1271,7 +1274,10 @@ async fn live_the_session_limit_refuses_the_one_past_it() {
     let second = browser.open_session(options()).await.expect("opens");
 
     browser.shutdown().await;
-    assert_eq!(browser.list_sessions().await, [] as [tinybrowser::SessionInfo; 0]);
+    assert_eq!(
+        browser.list_sessions().await,
+        [] as [tinybrowser::SessionInfo; 0]
+    );
     let _ = second;
 }
 
